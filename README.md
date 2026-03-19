@@ -3,7 +3,7 @@
 
 YouTube - https://studio.youtube.com/video/bC17AgROvXw/edit
 
-Instructable - 
+Instructable - https://www.instructables.com/Conways-Game-of-Life-XL-Screen-Raspberry-Pi-Projec/
 
 
 In-Game Controls (All Simulation Modes)
