@@ -1,22 +1,22 @@
 In-Game Controls (All Simulation Modes)
 
-  Up - Increase simulation speed
+    Up - Increase simulation speed
 
-  Down - Decrease simulation speed
+    Down - Decrease simulation speed
 
-  Left - Cycle cell size (Small 3px → Normal 4px → Large 8px)
+    Left - Cycle cell size (Small 3px → Normal 4px → Large 8px)
 
-  Right - Reset / regenerate the current pattern
+    Right - Reset / regenerate the current pattern
 
-  Up + Down - colour mode
+    Up + Down - colour mode
 
-  SET (hold) - Start simulation from edit mode
+    SET (hold) - Start simulation from edit mode
 
-  SET (hold, running) - Return to edit mode (Custom/Seeds/Brian's Brain only)
+    SET (hold, running) - Return to edit mode (Custom/Seeds/Brian's Brain only)
 
-  B (short press) - Return to menu
+    B (short press) - Return to menu
 
-  B (hold ~1 second) - Show/hide rules and information panel
+    B (hold ~1 second) - Show/hide rules and information panel
 
 
 
