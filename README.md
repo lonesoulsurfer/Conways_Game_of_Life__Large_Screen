@@ -1,6 +1,7 @@
 ![EKFB7789](https://github.com/user-attachments/assets/8086c965-b3ab-4619-91e8-f7d19dc50e9e)
 
 **YouTube:** https://studio.youtube.com/video/bC17AgROvXw/edit
+
 **Instructable:** https://www.instructables.com/Conways-Game-of-Life-XL-Screen-Raspberry-Pi-Projec/
 
 ---
