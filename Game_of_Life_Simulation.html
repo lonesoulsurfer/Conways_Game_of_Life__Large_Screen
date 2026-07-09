@@ -1,0 +1,2357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Game of Life XL — Try It</title>
+<style>
+  :root {
+    --bezel: #1c1e22;
+    --bezel-edge: #050607;
+    --screen-bg: #000000;
+    --amber: #ffb020;
+    --btn-face: #2a2d33;
+    --btn-face-active: #ffb020;
+    --btn-text: #cfd3da;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0a0b0d;
+    font-family: 'Courier New', Consolas, monospace;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  .device {
+    width: 100%;
+    max-width: 520px;
+    padding: 18px 16px 24px;
+    background: linear-gradient(180deg, var(--bezel), #121316);
+    border: 1px solid var(--bezel-edge);
+    border-radius: 22px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+  .brand-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 0 4px 10px;
+    color: #6b7078;
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .brand-row b { color: var(--amber); font-weight: 600; }
+  .screen-bezel {
+    background: #000;
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: inset 0 0 0 2px #000, inset 0 0 18px rgba(0,0,0,0.9);
+    border: 1px solid #000;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: var(--screen-bg);
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border-radius: 2px;
+  }
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding: 0 6px;
+  }
+  .dpad {
+    position: relative;
+    width: 132px;
+    height: 132px;
+  }
+  .dpad button {
+    position: absolute;
+    width: 44px; height: 44px;
+    background: var(--btn-face);
+    color: var(--btn-text);
+    border: 1px solid #1a1c20;
+    border-radius: 8px;
+    font-size: 16px;
+    box-shadow: 0 2px 0 #0d0e10, inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .dpad button:active, .dpad button.held { background: var(--btn-face-active); color: #1a1200; box-shadow: 0 1px 0 #7a5200; transform: translateY(1px); }
+  .dpad .up    { top: 0;   left: 44px; }
+  .dpad .down  { top: 88px; left: 44px; }
+  .dpad .left  { top: 44px; left: 0; }
+  .dpad .right { top: 44px; left: 88px; }
+  .action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    align-items: center;
+  }
+  .action-buttons button {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: var(--btn-face);
+    color: var(--btn-text);
+    border: 1px solid #1a1c20;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    box-shadow: 0 3px 0 #0d0e10, inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .action-buttons button:active, .action-buttons button.held { background: var(--btn-face-active); color: #1a1200; box-shadow: 0 1px 0 #7a5200; transform: translateY(2px); }
+  #set-btn { color: #6ee7ff; }
+  .action-buttons button.held#set-btn, .action-buttons #set-btn:active { color: #1a1200; }
+  .hint {
+    text-align: center;
+    color: #55595f;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div class="device">
+  <div class="brand-row"><b>GAME OF LIFE XL</b></div>
+
+  <div class="screen-bezel">
+    <canvas id="screen" width="480" height="320"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="dpad">
+      <button class="up"    data-btn="up">▲</button>
+      <button class="down"  data-btn="down">▼</button>
+      <button class="left"  data-btn="left">◀</button>
+      <button class="right" data-btn="right">▶</button>
+    </div>
+    <div class="action-buttons">
+      <button id="set-btn" data-btn="set">A</button>
+      <button id="b-btn"   data-btn="b">B</button>
+    </div>
+  </div>
+
+  <div class="hint">Tap A to select · B to go back · hold B for rules &amp; info · Up+Down to toggle colour</div>
+</div>
+
+<script>
+(function () {
+"use strict";
+
+// ============================================================
+//  CONSTANTS — mirrors the physical device's screen + cell sizes
+// ============================================================
+const SCREEN_WIDTH = 480;
+const SCREEN_HEIGHT = 320;
+const CELL_SIZES = [3, 4, 8];       // Small, Normal, Large — same as the real firmware
+const CELL_SIZE_NAMES = ["Small", "Normal", "Large"];
+let cellSizeIndex = 1;              // start on Normal, same default as the device
+
+const COLOR_BG = "#000000";
+const COLOR_ALIVE = "#ffffff";
+const COLOR_SELECT_BG = "#ffffff";
+const COLOR_SELECT_TEXT = "#000000";
+const COLOR_MENU_TEXT = "#ffffff";
+const COLOR_DIM = "#666666";
+
+const canvas = document.getElementById("screen");
+const ctx = canvas.getContext("2d");
+
+// ============================================================
+//  BOARD STATE
+// ============================================================
+let cellSize = CELL_SIZES[cellSizeIndex];
+let boardW = Math.floor(SCREEN_WIDTH / cellSize);
+let boardH = Math.floor(SCREEN_HEIGHT / cellSize);
+let board = null;         // Uint8Array boardW*boardH, 1/0
+let newBoard = null;
+let cellAge = null;       // Uint16Array — generations a cell has been continuously alive
+let deathTrail = null;    // Uint8Array — countdown 20..0 for Trail Mode fade
+
+// ---- Alt Games shared state ----
+// Brian's Brain: alive/dying/dead 3-state, plus a colour-mode trail age.
+let dying = null, newDying = null, bbTrailAge = null;
+// Cyclic CA and Wireworld reuse the same two state arrays, matching firmware's
+// cyclicStates/cyclicNewStates being #define'd for both — they're never active
+// simultaneously.
+let cyclicStates = null, cyclicNewStates = null;
+// Langton's Ant reuses board[] for cell colour (0=white,1=black); just needs position/heading.
+let antX = 0, antY = 0, antDir = 0;
+// Wolfram 1D — no board array, just two row buffers plus every completed row
+// (so we can redraw the whole scrolling image each animation frame).
+let wolframCurrent = null, wolframNext = null;
+let wolframRows = [];      // array of Uint8Array, one per completed pixel-row
+let wolframRow = 0;
+let wolframDone = false;
+
+// ---- Lenia Sandbox (Phase 3) — a continuous CA with its own fixed grid
+// and layout (160px parameter panel + 320x320 play area), independent of
+// the rest of the app's boardW/H/cellSize.
+const LENIA_CELL_SIZE = 4;
+const LENIA_PANEL_WIDTH = 160;
+const LENIA_GRID_W = Math.floor((SCREEN_WIDTH - LENIA_PANEL_WIDTH) / LENIA_CELL_SIZE); // 80
+const LENIA_GRID_H = Math.floor(SCREEN_HEIGHT / LENIA_CELL_SIZE);                      // 80
+const LENIA_MAX_RADIUS = 10;
+// 30ms was the firmware's throttle FLOOR, not its actual real-world pace —
+// on hardware the true limiter is convolution + SPI draw time at the chosen
+// radius (see LeniaMode.ino's comment on this constant), which our canvas
+// doesn't have. Modelling interval as scaling with radius^2 approximates
+// that real slowdown; tune the multiplier below if it still feels off.
+function leniaStepIntervalMs() {
+  return 30 + leniaRadius * leniaRadius * 3;
+}
+const LENIA_KERNEL_SIZE = 2 * LENIA_MAX_RADIUS + 1;
+
+let leniaBoard = new Float32Array(LENIA_GRID_W * LENIA_GRID_H);
+let leniaNextBoard = new Float32Array(LENIA_GRID_W * LENIA_GRID_H);
+let leniaMu = 0.15, leniaSigma = 0.017, leniaRadius = 6, leniaDt = 0.15; // Orbium ballpark defaults
+let leniaPanelRow = 0;      // 0=Mu 1=Sigma 2=Radius 3=Speed
+let leniaColorScheme = 0;   // 0=blue/cyan/white, 1=fire
+let leniaKernel = new Float32Array(LENIA_KERNEL_SIZE * LENIA_KERNEL_SIZE);
+let leniaGrowthLUT = new Float32Array(256);
+let leniaShowingRules = false;
+let leniaResetComboStart = null; // tracks how long SET+B have been held together
+let leniaResetComboFired = false;
+let lastLeniaStep = 0;
+function leniaIdx(x, y) { return y * LENIA_GRID_W + x; }
+
+function allocBoards() {
+  boardW = Math.floor(SCREEN_WIDTH / cellSize);
+  boardH = Math.floor(SCREEN_HEIGHT / cellSize);
+  board = new Uint8Array(boardW * boardH);
+  newBoard = new Uint8Array(boardW * boardH);
+  cellAge = new Uint16Array(boardW * boardH);
+  deathTrail = new Uint8Array(boardW * boardH);
+  dying = new Uint8Array(boardW * boardH);
+  newDying = new Uint8Array(boardW * boardH);
+  bbTrailAge = new Uint8Array(boardW * boardH);
+  cyclicStates = new Uint8Array(boardW * boardH);
+  cyclicNewStates = new Uint8Array(boardW * boardH);
+  wolframCurrent = new Uint8Array(boardW);
+  wolframNext = new Uint8Array(boardW);
+}
+allocBoards();
+
+function idx(x, y) { return y * boardW + x; }
+
+// ============================================================
+//  TOOLS SETTINGS (Phase 1 subset — see chat notes for what's cut)
+// ============================================================
+const tools = {
+  soundEnabled: true,        // firmware default: soundEnabled = true
+  soundVolumeIdx: 1,         // 0=Low,1=Medium,2=High — firmware default soundVolume=2 (Medium)
+  toroidalWorld: true,       // NOTE: real firmware's core Life/Rule Explorer step ALWAYS
+                             // wraps regardless of this flag — replicated faithfully below.
+                             // This flag only matters once Alt Games (Phase 2) lands.
+  gridLines: false,
+  populationCounter: false,
+  trailMode: false,
+  autoCycleMode: false,      // firmware default: autoCycleMode = false (screensaver, inert here)
+  screenBrightnessIdx: 2,    // 0=25%,1=50%,2=75%,3=100% — firmware default screenBrightness=3 (75%)
+  colourMode: false,         // toggled via the Up+Down combo, NOT a Tools-menu entry in firmware
+  // Alt Games each have their own independent colour flag in firmware
+  // (briansBrainColorMode, dayNightColorMode, etc.) — also Up+Down combo only.
+  briansBrainColour: false,
+  dayNightColour: false,
+  seedsColour: false,
+  cyclicColour: false,
+  langtonColour: false,
+  wolframColour: false,
+};
+
+// ============================================================
+//  RULE EXPLORER PRESET TABLE — pulled directly from PRESET_RULES[] in the sketch
+//  Birth/survival are 8-bit masks: bit N = "N neighbours triggers this".
+//  NOTE: neighbour count 8 can never be represented in an 8-bit mask (would need
+//  a 9th bit), so despite some of the original comments claiming e.g. "S45678",
+//  neighbour count 8 can never actually fire. Replicated as-is for fidelity.
+// ============================================================
+const RULE_PRESETS = [
+  { name: "High Life",  birth: 0b01001000, survival: 0b00001100 },
+  { name: "34 Life",    birth: 0b00011000, survival: 0b00011000 },
+  { name: "Diamoeba",   birth: 0b11111000, survival: 0b11111000 },
+  { name: "Replicator", birth: 0b10101010, survival: 0b10101010 },
+  { name: "Long Life",  birth: 0b00001000, survival: 0b00100000 },
+  { name: "Maze",       birth: 0b00001000, survival: 0b00111110 },
+  { name: "Coral",      birth: 0b00001000, survival: 0b11111000 },
+  { name: "2x2",        birth: 0b01001000, survival: 0b00100010 },
+  { name: "Dry Life",   birth: 0b10001000, survival: 0b00001100 },
+  { name: "Amoeba",     birth: 0b10101000, survival: 0b10101010 },
+  { name: "Coagulate",  birth: 0b10001000, survival: 0b00001100 },
+  { name: "Gnarl",      birth: 0b00000010, survival: 0b00000010 },
+];
+// +1 for the "Custom Rule" entry appended after the presets, matching
+// firmware's NUM_PRESET_RULES + 1.
+const RULE_LIST_TOTAL = RULE_PRESETS.length + 1;
+
+// ============================================================
+//  PRESET PATTERNS — coordinates extracted programmatically from
+//  loadPresetPattern() in Game_of_Life_Colour_Lg.ino (centreX/centreY relative
+//  offsets), not retyped by hand.
+// ============================================================
+const PRESETS = [
+  { name: "Coe Ship", cells: [[4,-4],[5,-4],[6,-4],[7,-4],[8,-4],[9,-4],[2,-3],[3,-3],[9,-3],[0,-2],[1,-2],[3,-2],[9,-2],[4,-1],[8,-1],[6,0],[6,1],[7,1],[5,2],[6,2],[7,2],[8,2],[5,3],[6,3],[8,3],[9,3],[7,4],[8,4]] },
+  { name: "Gosper Gun", cells: [[-18,0],[-18,1],[-17,0],[-17,1],[-8,0],[-8,-1],[-8,1],[-7,-2],[-7,2],[-6,-3],[-6,3],[-5,-3],[-5,3],[-4,0],[-3,-2],[-3,2],[-2,-1],[-2,0],[-2,1],[-1,0],[2,-1],[2,-2],[2,-3],[3,-1],[3,-2],[3,-3],[4,0],[4,-4],[6,-5],[6,-4],[6,0],[6,1],[16,-2],[16,-3],[17,-2],[17,-3]] },
+  { name: "Diamond", cells: [[-2,-4],[-1,-4],[0,-4],[1,-4],[-4,-2],[-3,-2],[-2,-2],[-1,-2],[0,-2],[1,-2],[2,-2],[3,-2],[-6,0],[-5,0],[-4,0],[-3,0],[-2,0],[-1,0],[0,0],[1,0],[2,0],[3,0],[4,0],[5,0],[-4,2],[-3,2],[-2,2],[-1,2],[0,2],[1,2],[2,2],[3,2],[-2,4],[-1,4],[0,4],[1,4]] },
+  { name: "Achim p144", cells: [[-14,-9],[-13,-9],[12,-9],[13,-9],[-14,-8],[-13,-8],[12,-8],[13,-8],[4,-7],[5,-7],[3,-6],[6,-6],[4,-5],[5,-5],[0,-4],[-1,-3],[1,-3],[-2,-2],[2,-2],[-2,-1],[1,-1],[-2,1],[1,1],[-3,2],[1,2],[-2,3],[0,3],[-1,4],[-6,5],[-5,5],[-7,6],[-4,6],[-6,7],[-5,7],[-14,8],[-13,8],[12,8],[13,8],[-14,9],[-13,9],[12,9],[13,9]] },
+  { name: "56P6H1V0", cells: [[-13,-5],[-12,-5],[-11,-5],[-9,-5],[-9,-4],[-9,-3],[-8,-6],[-7,-6],[-6,-6],[-6,-1],[-6,0],[-6,4],[-5,-4],[-5,1],[-5,3],[-5,5],[-4,0],[-4,1],[-3,-3],[-3,-2],[-3,1],[-3,2],[-2,-4],[-2,-2],[-2,-1],[-2,1],[-1,-5],[-1,1],[0,-5],[0,1],[1,-4],[1,-2],[1,-1],[1,1],[2,-3],[2,-2],[2,1],[2,2],[3,0],[3,1],[4,-4],[4,1],[4,3],[4,5],[5,-6],[5,-1],[5,0],[5,4],[6,-6],[7,-6],[8,-5],[8,-4],[8,-3],[10,-5],[11,-5],[12,-5]] },
+  { name: "LWSS Convoy", cells: (function(){ const c=[]; for (let k=0;k<3;k++){ const ox=-20+k*16, oy=0; [[1,0],[2,0],[3,0],[4,0],[0,1],[4,1],[4,2],[0,3],[3,3]].forEach(([dx,dy])=>c.push([ox+dx,oy+dy])); } return c; })() },
+  { name: "MWSS", cells: [[0,-1],[0,0],[0,1],[1,-2],[1,1],[2,1],[3,1],[4,1],[5,-2],[5,0]] },
+  { name: "Pulsar", cells: (function(){ const c=[]; for (let arm=0; arm<4; arm++){ const sx = arm%2===0?1:-1; const sy = arm<2?1:-1; for (let i=2;i<=4;i++){ c.push([sx*i, sy*1]); c.push([sx*i, sy*6]); } for (let i=2;i<=4;i++){ c.push([sx*1, sy*i]); c.push([sx*6, sy*i]); } } return c; })() },
+  { name: "Pentadecathlon", cells: (function(){ const c=[]; for (let i=-4;i<=5;i++) c.push([i,0]); const filtered = c.filter(([x])=> x!==-3 && x!==4); filtered.push([-3,-1],[-3,1],[4,-1],[4,1]); return filtered; })() },
+  { name: "R-Pentomino", cells: [[0,-1],[1,-1],[-1,0],[0,0],[0,1]] },
+  { name: "Acorn", cells: [[-3,0],[-1,-1],[-1,1],[0,1],[1,1],[2,1],[3,1]] },
+  { name: "Simkin Gun", cells: [[-16,-9],[-15,-9],[-9,-9],[-8,-9],[-16,-8],[-15,-8],[-9,-8],[-8,-8],[-12,-6],[-11,-6],[-12,-5],[-11,-5],[6,0],[7,0],[9,0],[10,0],[5,1],[11,1],[5,2],[12,2],[15,2],[16,2],[5,3],[6,3],[7,3],[11,3],[15,3],[16,3],[10,4],[8,9],[10,9],[11,9],[8,10],[9,10],[11,10]] },
+  { name: "Queen Bee", cells: [[-2,-4],[-4,-3],[-2,-3],[-5,-2],[-3,-2],[-11,-1],[-10,-1],[-6,-1],[-3,-1],[-11,0],[-10,0],[-5,0],[-3,0],[-4,1],[-2,1],[7,1],[8,1],[-2,2],[7,2],[9,2],[9,3],[9,4],[10,4]] },
+];
+
+// ============================================================
+//  DRAWING HELPERS
+// ============================================================
+function clearScreen() {
+  ctx.fillStyle = COLOR_BG;
+  ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+}
+
+function drawGridLines() {
+  if (!tools.gridLines) return;
+  ctx.strokeStyle = "rgba(255,255,255,0.08)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= boardW; x++) {
+    ctx.beginPath();
+    ctx.moveTo(x * cellSize + 0.5, 0);
+    ctx.lineTo(x * cellSize + 0.5, SCREEN_HEIGHT);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= boardH; y++) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * cellSize + 0.5);
+    ctx.lineTo(SCREEN_WIDTH, y * cellSize + 0.5);
+    ctx.stroke();
+  }
+}
+
+// Firmware colours are RGB565 (5/6/5-bit channels) — decode exactly rather
+// than guessing hex approximations, so every ported palette matches exactly.
+function rgb565ToCss(hex565) {
+  const r5 = (hex565 >> 11) & 0x1F;
+  const g6 = (hex565 >> 5) & 0x3F;
+  const b5 = hex565 & 0x1F;
+  const r = Math.round((r5 * 255) / 31);
+  const g = Math.round((g6 * 255) / 63);
+  const b = Math.round((b5 * 255) / 31);
+  return `rgb(${r},${g},${b})`;
+}
+
+// Age-based colour LUT (Colour Mode) — ported directly from getColorByAge()
+// in the sketch: Blue -> Cyan -> Green -> Yellow -> Red -> Magenta, holding
+// at bright Magenta for age 80+. Firmware works in RGB565 (5/6/5-bit
+// channels); converted to 0-255 here for canvas.
+function ageColor(age) {
+  if (age <= 0) return "rgb(0,0,0)";
+  let r5 = 0, g6 = 0, b5 = 0;
+  if (age < 5) {          // Blue (0,0,31) -> Cyan (0,63,31)
+    g6 = Math.floor((age * 63) / 5);
+    b5 = 31;
+  } else if (age < 10) {  // Cyan -> Green (0,63,0)
+    g6 = 63;
+    b5 = 31 - Math.floor(((age - 5) * 31) / 5);
+  } else if (age < 20) {  // Green -> Yellow (31,63,0)
+    r5 = Math.floor(((age - 10) * 31) / 10);
+    g6 = 63;
+  } else if (age < 40) {  // Yellow -> Red (31,0,0)
+    r5 = 31;
+    g6 = 63 - Math.floor(((age - 20) * 63) / 20);
+  } else if (age < 80) {  // Red -> Magenta (31,0,31)
+    r5 = 31;
+    b5 = Math.floor(((age - 40) * 31) / 40);
+  } else {                // Bright Magenta for very old cells
+    r5 = 31; g6 = 0; b5 = 31;
+  }
+  const r = Math.round((r5 * 255) / 31);
+  const g = Math.round((g6 * 255) / 63);
+  const b = Math.round((b5 * 255) / 31);
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawBoard() {
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
+      const i = idx(x, y);
+      if (board[i]) {
+        ctx.fillStyle = tools.colourMode ? ageColor(cellAge[i]) : COLOR_ALIVE;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      } else if (tools.trailMode && deathTrail[i] > 0) {
+        const bright = Math.floor((deathTrail[i] / 20) * 200);
+        ctx.fillStyle = `rgb(${bright},${bright},${bright})`;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      }
+    }
+  }
+}
+
+function drawHUD() {
+  if (!tools.populationCounter) return;
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(0, 0, 150, 20);
+  ctx.fillStyle = COLOR_MENU_TEXT;
+  ctx.font = "13px 'Courier New', monospace";
+  ctx.textBaseline = "top";
+  ctx.fillText(`Pop:${population}  Gen:${generation}`, 4, 3);
+}
+
+// ============================================================
+//  MENU SYSTEM
+// ============================================================
+// screen: "main" | "presetList" | "presetPreview" | "presetRunning"
+//       | "random" | "symmetric" | "custom" | "ruleList" | "ruleRunning"
+//       | "toolsList" | "rulesPanel"
+//       | "symmetricSize" | "cellSizeSelect"   -- new submenus, see below
+//       | "ruleCustomEdit"                      -- Rule Explorer's "Custom Rule" bit editor
+let screen = "main";
+let prevScreenForRulesPanel = "main";
+
+const MAIN_MENU = ["Presets", "Random", "Symmetric", "Custom", "Rule Explorer", "Alt Games", "Tools"];
+let mainSel = 0;
+let presetSel = 0;
+let ruleSel = 0;
+let toolsSel = 0;
+// Ported directly from firmware's 8-item Tools submenu (toolsSelection 1-8),
+// in the same order. "type: cycle" steps through `values` on tap; plain
+// entries are simple ON/OFF toggles. `onOffLabels` overrides the ON/OFF text
+// (e.g. World shows Toroid/Open, matching the firmware's display strings).
+const TOOLS_MENU = [
+  { key: "soundEnabled", label: "Sound" },
+  { key: "soundVolumeIdx", label: "Volume", type: "cycle", values: ["Low", "Medium", "High"] },
+  { key: "toroidalWorld", label: "World", onOffLabels: ["Open", "Toroid"] },
+  { key: "gridLines", label: "Grid" },
+  { key: "populationCounter", label: "Population" },
+  { key: "trailMode", label: "Trail Mode" },
+  { key: "autoCycleMode", label: "Auto-Cycle" },
+  { key: "screenBrightnessIdx", label: "Brightness", type: "cycle", values: ["25%", "50%", "75%", "100%"] },
+];
+
+// ---- Alt Games — mirrors firmware's inAltGamesSubMenu / altGameSelection.
+// Order and names match the firmware's 8-item list exactly. Lenia Sandbox
+// is Phase 3 — selecting it for now just shows the "coming soon" placeholder.
+const ALT_GAMES_MENU = ["Brian's Brain", "Day & Night", "Seeds", "Cyclic", "Wireworld", "Langton's Ant", "Wolfram 1D", "Lenia Sandbox"];
+let altGameSel = 0;
+let altGameMode = null; // 'briansBrain'|'dayNight'|'seeds'|'cyclic'|'wireworld'|'langton'|'wolfram'
+
+// Brian's Brain submenu (0-based: Small/Medium/Large/Random/Custom)
+const BB_SIZE_LABELS = ["Small", "Medium", "Large", "Random", "Custom"];
+let briansBrainSizeSel = 0;
+let currentBriansBrainSize = 0;   // which size is active (0-3; Custom doesn't use this)
+let briansBrainWasCustom = false; // so B-back returns to Cell Size, not the size list
+
+// Day & Night submenu (0-based: Medium 35% / Dense 50%)
+const DN_DENSITY_LABELS = ["Medium", "Dense"];
+let dayNightDensitySel = 0;
+
+// Seeds submenu (0-based: Random / Custom)
+const SEEDS_GAME_LABELS = ["Random", "Custom"];
+let seedsGameSel = 0;
+let seedsWasCustom = false;
+
+// Cyclic CA submenu (0-based: Vertical / 4-Way Rotate / Random)
+const CYCLIC_SIZE_LABELS = ["Vertical", "4-Way Rotate", "Random"];
+let cyclicSizeSel = 0;
+let currentCyclicSize = 0;
+
+// Wolfram 1D submenu — 7 fixed rule presets, matching firmware's wolframPresetRules[].
+const WOLFRAM_PRESETS = [
+  { name: "Rule 30 (Chaos)",      rule: 30 },
+  { name: "Rule 90 (Sierpinski)", rule: 90 },
+  { name: "Rule 110 (Turing)",    rule: 110 },
+  { name: "Rule 184 (Traffic)",   rule: 184 },
+  { name: "Rule 45",              rule: 45 },
+  { name: "Rule 73",              rule: 73 },
+  { name: "Rule 105",             rule: 105 },
+];
+let wolframPresetSel = 0;
+let wolframRuleVal = 30;
+
+let customEditRow = 0;     // 0 = Birth, 1 = Survival
+let customEditCursor = 3;  // 0-8, which neighbour-count bit is selected
+
+// ---- Symmetric submenu — mirrors firmware's inSymmetricSubMenu / symmetricSizeSelection.
+// 0=Small, 1=Medium, 2=Large (0-based here to match this file's other menu indices;
+// firmware's version is 1-based but the wraparound and labels are identical).
+const SYMMETRIC_SIZE_LABELS = ["Small", "Medium", "Large"];
+let symmetricSizeSel = 0;
+let currentSymmetrySize = 2; // which size is actually active in the running pattern (0/1/2)
+
+// ---- Cell Size submenu — mirrors firmware's inCellSizeSubMenu / cellSizeSelection.
+// Reached from Custom (pendingGameMode==2), Seeds Custom (==6), and Brian's
+// Brain Custom (==8) — cellSizeMenuTarget records which one requested it so
+// SET-confirm can route to the right place: "custom" | "seedsCustom" | "briansBrainCustom".
+let cellSizeMenuSel = 1;               // 0/1/2, defaults to the currently-active cell size
+let cellSizeMenuTarget = "custom";     // which flow requested the submenu
+
+let running = false;
+let ruleExplorerMode = false;
+let activeBirthRule = 0b00001000;
+let activeSurvivalRule = 0b00001100;
+let generation = 0;
+let population = 0;
+let simIntervalMs = 150;
+let lastStepTime = 0;
+let currentPresetId = 0;
+let editCursorX = 0, editCursorY = 0;
+let currentSymmetryType = 1;
+let customGameMode = "life"; // 'life' | 'seeds' | 'briansBrain' — which engine the shared "custom" screen runs
+
+function clearBoardArrays() {
+  board.fill(0);
+  newBoard.fill(0);
+  cellAge.fill(0);
+  deathTrail.fill(0);
+  generation = 0;
+  population = 0;
+}
+
+// Clears the shared "custom" edit screen's board, including the extra state
+// arrays needed when it's running Brian's Brain or Seeds instead of plain Life.
+function clearCustomBoardForMode() {
+  clearBoardArrays();
+  if (customGameMode === "briansBrain") { dying.fill(0); newDying.fill(0); bbTrailAge.fill(0); }
+}
+
+function recountPopulation() {
+  let p = 0;
+  for (let i = 0; i < board.length; i++) if (board[i]) p++;
+  population = p;
+}
+
+// ---- Standard Life / Rule Explorer step — always toroidal, matching the
+// firmware's updateGame(), which ignores the Toroidal World tools flag. ----
+function stepLife() {
+  population = 0;
+  for (let x = 0; x < boardW; x++) {
+    const xL = (x - 1 + boardW) % boardW;
+    const xR = (x + 1) % boardW;
+    for (let y = 0; y < boardH; y++) {
+      const yU = (y - 1 + boardH) % boardH;
+      const yD = (y + 1) % boardH;
+      const neighbors =
+        board[idx(xL, yU)] + board[idx(xL, y)] + board[idx(xL, yD)] +
+        board[idx(x,  yU)]                       + board[idx(x,  yD)] +
+        board[idx(xR, yU)] + board[idx(xR, y)] + board[idx(xR, yD)];
+
+      const i = idx(x, y);
+      let alive;
+      if (ruleExplorerMode) {
+        alive = board[i]
+          ? (activeSurvivalRule & (1 << neighbors)) !== 0
+          : (activeBirthRule & (1 << neighbors)) !== 0;
+      } else {
+        alive = board[i] ? (neighbors === 2 || neighbors === 3) : (neighbors === 3);
+      }
+      newBoard[i] = alive ? 1 : 0;
+      if (alive) population++;
+    }
+  }
+  // age + death-trail bookkeeping, then swap
+  for (let i = 0; i < board.length; i++) {
+    if (newBoard[i]) {
+      cellAge[i] = board[i] ? cellAge[i] + 1 : 1;
+      deathTrail[i] = 0;
+    } else {
+      cellAge[i] = 0;
+      if (board[i]) deathTrail[i] = 20; // just died — start the fade countdown
+      else if (deathTrail[i] > 0) deathTrail[i]--;
+    }
+  }
+  board.set(newBoard);
+  generation++;
+}
+
+// Shared 8-neighbour counter for the Alt Games automata — respects the
+// Toroidal World tools flag (unlike stepLife(), which is always toroidal),
+// matching each automaton's own "if (toroidalWorld)" check in firmware.
+function countMooreNeighbors(x, y, isActive) {
+  let count = 0;
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      let nx = x + dx, ny = y + dy;
+      if (tools.toroidalWorld) {
+        nx = (nx + boardW) % boardW;
+        ny = (ny + boardH) % boardH;
+      } else if (nx < 0 || nx >= boardW || ny < 0 || ny >= boardH) {
+        continue;
+      }
+      if (isActive(nx, ny)) count++;
+    }
+  }
+  return count;
+}
+
+// ============================================================
+//  ALT GAMES — Brian's Brain
+// ============================================================
+function bbSeedVertical(size, density) {
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  for (let x = cx - size; x < cx; x++)
+    for (let y = cy - size; y <= cy + size; y++)
+      if (Math.random() * 100 < density) { board[idx(x, y)] = 1; board[idx(cx + (cx - x - 1), y)] = 1; }
+}
+function bbSeedHorizontal(size, density) {
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  for (let x = cx - size; x <= cx + size; x++)
+    for (let y = cy - size; y < cy; y++)
+      if (Math.random() * 100 < density) { board[idx(x, y)] = 1; board[idx(x, cy + (cy - y - 1))] = 1; }
+}
+function bbSeedRotational(size, density) {
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  for (let x = cx - size; x < cx; x++)
+    for (let y = cy - size; y < cy; y++)
+      if (Math.random() * 100 < density) {
+        board[idx(x, y)] = 1;
+        board[idx(cx + (cx - x - 1), cy + (cy - y - 1))] = 1;
+        board[idx(cx + (cx - x - 1), y)] = 1;
+        board[idx(x, cy + (cy - y - 1))] = 1;
+      }
+}
+function bbClear() { clearBoardArrays(); dying.fill(0); newDying.fill(0); bbTrailAge.fill(0); }
+// symType: 1=vertical, 2=horizontal, 3=rotational — matches firmware's random(3)+1
+function generateBriansBrainSmall() {
+  bbClear();
+  const symType = Math.floor(Math.random() * 3) + 1;
+  if (symType === 1) bbSeedVertical(8, 35);
+  else if (symType === 2) bbSeedHorizontal(8, 35);
+  else bbSeedRotational(8, 30);
+  recountPopulation();
+}
+function generateBriansBrainMedium() {
+  bbClear();
+  const symType = Math.floor(Math.random() * 3) + 1;
+  if (symType === 1) bbSeedVertical(15, 28);
+  else if (symType === 2) bbSeedHorizontal(15, 28);
+  else bbSeedRotational(15, 25);
+  recountPopulation();
+}
+function generateBriansBrainLarge() {
+  bbClear();
+  const symType = Math.floor(Math.random() * 3) + 1;
+  if (symType === 1) bbSeedVertical(28, 18);
+  else if (symType === 2) bbSeedHorizontal(28, 18);
+  else bbSeedRotational(28, 15);
+  recountPopulation();
+}
+function generateBriansBrainRandom() {
+  bbClear();
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  const radius = 10;
+  for (let x = cx - radius; x <= cx + radius; x++) {
+    for (let y = cy - radius; y <= cy + radius; y++) {
+      if (x < 0 || x >= boardW || y < 0 || y >= boardH) continue;
+      const dx = x - cx, dy = y - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const probability = 25 * (1 - dist / radius);
+      if (probability > 0 && Math.random() * 100 < probability) board[idx(x, y)] = 1;
+    }
+  }
+  recountPopulation();
+}
+function updateBriansBrain() {
+  let pop = 0;
+  for (let x = 0; x < boardW; x++) {
+    for (let y = 0; y < boardH; y++) {
+      const i = idx(x, y);
+      const isAlive = board[i] === 1, isDying = dying[i] === 1;
+      const neighbors = countMooreNeighbors(x, y, (nx, ny) => {
+        const ni = idx(nx, ny);
+        return board[ni] === 1 && dying[ni] !== 1;
+      });
+      if (isAlive && !isDying) { newBoard[i] = 0; newDying[i] = 1; }
+      else if (!isAlive && !isDying && neighbors === 2) { newBoard[i] = 1; newDying[i] = 0; }
+      else { newBoard[i] = 0; newDying[i] = 0; }
+      if (newBoard[i]) pop++;
+    }
+  }
+  if (tools.briansBrainColour) {
+    for (let i = 0; i < board.length; i++) {
+      if (newBoard[i] && !newDying[i]) bbTrailAge[i] = 0;
+      else if (newDying[i]) bbTrailAge[i] = bbTrailAge[i] === 0 ? 1 : Math.min(bbTrailAge[i] + 1, 19);
+      else if (bbTrailAge[i] > 0 && bbTrailAge[i] < 20) { bbTrailAge[i]++; if (bbTrailAge[i] >= 20) bbTrailAge[i] = 0; }
+    }
+  }
+  board.set(newBoard);
+  dying.set(newDying);
+  population = pop;
+  generation++;
+}
+// Trail-age colour ramp, ported directly from drawBriansBrain()'s colour branch
+// (exact firmware hex565 constants: white/yellow/orange/red/purple/dark purple).
+function bbTrailColor(age) {
+  if (age <= 3) return rgb565ToCss(0xFFFF);
+  if (age <= 6) return rgb565ToCss(0xFFE0);
+  if (age <= 9) return rgb565ToCss(0xFD20);
+  if (age <= 12) return rgb565ToCss(0xF800);
+  if (age <= 15) return rgb565ToCss(0x780F);
+  if (age <= 18) return rgb565ToCss(0x4008);
+  return null; // faded to black
+}
+function drawBriansBrainBoard() {
+  const blinkOn = Math.floor(performance.now() / 100) % 2 === 0;
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
+      const i = idx(x, y);
+      const isAlive = board[i] === 1, isDying = dying[i] === 1;
+      if (tools.briansBrainColour) {
+        if (isAlive && !isDying) ctx.fillStyle = rgb565ToCss(0x07FF); // bright cyan (firing neuron)
+        else if (isDying || bbTrailAge[i] > 0) {
+          const c = bbTrailColor(bbTrailAge[i]);
+          if (!c) continue;
+          ctx.fillStyle = c;
+        } else continue;
+      } else {
+        if (isAlive && !isDying) ctx.fillStyle = COLOR_ALIVE;
+        else if (isDying && blinkOn) ctx.fillStyle = COLOR_ALIVE;
+        else continue;
+      }
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+}
+
+// ============================================================
+//  ALT GAMES — Day & Night  (B3678/S34678)
+// ============================================================
+function initializeDayNight() {
+  clearBoardArrays();
+  const density = dayNightDensitySel === 0 ? 35 : 50;
+  for (let i = 0; i < board.length; i++) if (Math.random() * 100 < density) { board[i] = 1; cellAge[i] = 1; }
+  recountPopulation();
+}
+function updateDayNight() {
+  let pop = 0;
+  for (let x = 0; x < boardW; x++) {
+    for (let y = 0; y < boardH; y++) {
+      const i = idx(x, y);
+      const isAlive = board[i] === 1;
+      const n = countMooreNeighbors(x, y, (nx, ny) => board[idx(nx, ny)] === 1);
+      const shouldLive = isAlive
+        ? (n === 3 || n === 4 || n === 6 || n === 7 || n === 8)
+        : (n === 3 || n === 6 || n === 7 || n === 8);
+      newBoard[i] = shouldLive ? 1 : 0;
+      if (shouldLive) pop++;
+    }
+  }
+  if (tools.dayNightColour) {
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] !== newBoard[i]) cellAge[i] = 1;
+      else if (newBoard[i] && cellAge[i] < 255) cellAge[i]++;
+      else if (!newBoard[i] && cellAge[i] > 0 && cellAge[i] < 15) { cellAge[i]++; if (cellAge[i] >= 15) cellAge[i] = 0; }
+    }
+  }
+  board.set(newBoard);
+  population = pop;
+  generation++;
+}
+// Ported directly from getDayNightColorByAge() in the sketch.
+function dayNightColorByAge(age, isAliveNow) {
+  if (isAliveNow) {
+    if (age < 5) return rgb565ToCss(0xFFFF); // white
+    if (age < 15) return rgb565ToCss((31 << 11) | (Math.max(0, 63 - (age - 5)) << 5)); // -> gold
+    if (age < 30) return rgb565ToCss((31 << 11) | (Math.max(0, 53 - Math.floor(((age - 15) * 20) / 15)) << 5)); // -> orange
+    return rgb565ToCss(0xF800); // red
+  }
+  if (age === 0) return null;
+  if (age === 1) return rgb565ToCss(0x780F); // twilight purple
+  if (age < 5) return rgb565ToCss(Math.max(0, 31 - (age - 1) * 8)); // fading blue
+  if (age < 10) return rgb565ToCss(Math.max(0, 15 - (age - 5) * 3));
+  if (age < 15) return rgb565ToCss(Math.max(0, 5 - Math.floor((age - 10) / 2)));
+  return null; // faded to black
+}
+function drawDayNightBoard() {
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
+      const i = idx(x, y);
+      if (board[i]) {
+        ctx.fillStyle = tools.dayNightColour ? dayNightColorByAge(cellAge[i], true) : COLOR_ALIVE;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      } else if (tools.dayNightColour && cellAge[i] > 0) {
+        const c = dayNightColorByAge(cellAge[i], false);
+        if (c) { ctx.fillStyle = c; ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize); }
+      }
+    }
+  }
+}
+
+// ============================================================
+//  ALT GAMES — Seeds  (B2, no survival)
+// ============================================================
+function initializeSeeds() {
+  clearBoardArrays();
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  const halfW = 8, halfH = 4;
+  for (let x = cx - halfW; x < cx; x++) {
+    for (let y = cy - halfH; y < cy; y++) {
+      if (Math.random() * 100 < 8) {
+        board[idx(x, y)] = 1;
+        board[idx(x, cy + (cy - y - 1))] = 1;
+        board[idx(cx + (cx - x - 1), y)] = 1;
+        board[idx(cx + (cx - x - 1), cy + (cy - y - 1))] = 1;
+      }
+    }
+  }
+  recountPopulation();
+}
+function updateSeeds() {
+  let pop = 0;
+  for (let x = 0; x < boardW; x++) {
+    for (let y = 0; y < boardH; y++) {
+      const n = countMooreNeighbors(x, y, (nx, ny) => board[idx(nx, ny)] === 1);
+      const i = idx(x, y);
+      newBoard[i] = (n === 2) ? 1 : 0;
+      if (newBoard[i]) pop++;
+    }
+  }
+  if (tools.seedsColour) {
+    for (let i = 0; i < board.length; i++) {
+      if (newBoard[i]) cellAge[i] = 0;
+      else if (board[i] && !newBoard[i]) cellAge[i] = 1;
+      else if (cellAge[i] > 0 && cellAge[i] < 12) { cellAge[i]++; if (cellAge[i] >= 12) cellAge[i] = 0; }
+    }
+  }
+  board.set(newBoard);
+  population = pop;
+  generation++;
+  // Matches firmware: auto-restart when the pattern dies out or runs away,
+  // rather than leaving a dead or overgrown board sitting there forever.
+  if (population === 0 || (population > 500 && generation > 150)) {
+    if (seedsWasCustom) {
+      clearCustomBoardForMode();
+      running = false;
+      editCursorX = Math.floor(boardW / 2); editCursorY = Math.floor(boardH / 2);
+    } else {
+      initializeSeeds();
+    }
+    generation = 0;
+  }
+}
+// Ported directly from drawSeeds()'s colour branch — a distinctive flash
+// sequence rather than a simple fade: white -> gap -> cyan -> gap -> blue ->
+// purple -> magenta -> red -> orange -> yellow -> dark yellow -> fades out.
+function seedsColorByAge(age, isAliveNow) {
+  if (age === 0) return isAliveNow ? rgb565ToCss(0xFFFF) : null;
+  if (age === 1) return null;
+  if (age === 2) return rgb565ToCss(0x07FF);
+  if (age === 3) return null;
+  if (age === 4) return rgb565ToCss(0x001F);
+  if (age === 5) return rgb565ToCss(0x780F);
+  if (age === 6) return rgb565ToCss(0xF81F);
+  if (age === 7) return rgb565ToCss(0xF800);
+  if (age === 8) return rgb565ToCss(0xFD20);
+  if (age === 9) return rgb565ToCss(0xFFE0);
+  if (age === 10) return rgb565ToCss(0x8410);
+  if (age === 11) return rgb565ToCss(0x2104);
+  return null;
+}
+function drawSeedsBoard() {
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
+      const i = idx(x, y);
+      if (tools.seedsColour) {
+        const c = seedsColorByAge(cellAge[i], board[i] === 1);
+        if (c) { ctx.fillStyle = c; ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize); }
+      } else if (board[i]) {
+        ctx.fillStyle = COLOR_ALIVE;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      }
+    }
+  }
+}
+
+// ============================================================
+//  ALT GAMES — Cyclic CA (6 states, threshold 3)
+// ============================================================
+const CYCLIC_THRESHOLD = 3;
+const CYCLIC_COLORS = ["#000000", "#ff0000", "#ff8c00", "#00ff00", "#00ffff", "#ff00ff"];
+function initializeCyclic() {
+  cyclicStates.fill(0); cyclicNewStates.fill(0);
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  // 0-based cyclicSizeSel: 0=Vertical,1=4-Way Rotate,2=Random
+  const patternType = (cyclicSizeSel === 2) ? Math.floor(Math.random() * 2) : cyclicSizeSel;
+  const patternSize = (cyclicSizeSel === 2) ? (Math.floor(Math.random() * 2) + 2) : (cyclicSizeSel + 2);
+  if (patternType === 0) {
+    const halfWidth = (patternSize === 2) ? 12 : 22;
+    const density = (patternSize === 2) ? 33 : 25;
+    const divisor = (patternSize === 2) ? 3 : 5;
+    for (let x = cx - halfWidth; x < cx; x++) {
+      if (x < 0) continue;
+      for (let y = 0; y < boardH; y++) {
+        if (Math.random() * 100 < density) {
+          const distFromCenterX = Math.abs(x - cx);
+          const state = (Math.floor(distFromCenterX / divisor) + Math.floor(y / 6)) % 5 + 1;
+          const mirrorX = cx + (cx - x - 1);
+          if (mirrorX < boardW) { cyclicStates[idx(x, y)] = state; cyclicStates[idx(mirrorX, y)] = state; }
+        }
+      }
+    }
+  } else {
+    const density = (patternSize === 2) ? 25 : 20;
+    const divisor = (patternSize === 2) ? 4 : 5;
+    for (let x = 0; x < cx; x++) {
+      for (let y = 0; y < cy; y++) {
+        if (Math.random() * 100 < density) {
+          const dx = x - cx, dy = y - cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const state = Math.floor(dist / divisor) % 5 + 1;
+          cyclicStates[idx(x, y)] = state;
+          cyclicStates[idx(boardW - 1 - x, boardH - 1 - y)] = state;
+          cyclicStates[idx(boardW - 1 - x, y)] = state;
+          cyclicStates[idx(x, boardH - 1 - y)] = state;
+        }
+      }
+    }
+  }
+  generation = 0; population = 0;
+}
+function updateCyclic() {
+  let count = 0;
+  for (let x = 0; x < boardW; x++) {
+    for (let y = 0; y < boardH; y++) {
+      const i = idx(x, y);
+      const currentState = cyclicStates[i];
+      const nextState = (currentState + 1) % 6;
+      const n = countMooreNeighbors(x, y, (nx, ny) => cyclicStates[idx(nx, ny)] === nextState);
+      cyclicNewStates[i] = (n >= CYCLIC_THRESHOLD) ? nextState : currentState;
+      if (cyclicNewStates[i] > 0) count++;
+    }
+  }
+  cyclicStates.set(cyclicNewStates);
+  population = count;
+  generation++;
+}
+function drawCyclicBoard() {
+  if (tools.cyclicColour) {
+    for (let y = 0; y < boardH; y++) {
+      for (let x = 0; x < boardW; x++) {
+        const state = cyclicStates[idx(x, y)];
+        if (state === 0) continue;
+        ctx.fillStyle = CYCLIC_COLORS[state];
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      }
+    }
+  } else {
+    // Mono mode — simplified from firmware's per-state blink patterns to a
+    // brightness ramp by state (state 5 = solid, others dimmer).
+    const t = performance.now();
+    const fastBlink = Math.floor(t / 100) % 2 === 0;
+    const slowBlink = Math.floor(t / 300) % 2 === 0;
+    for (let y = 0; y < boardH; y++) {
+      for (let x = 0; x < boardW; x++) {
+        const state = cyclicStates[idx(x, y)];
+        if (state === 0) continue;
+        let show = true;
+        if (state === 2) show = fastBlink;
+        else if (state === 3) show = slowBlink;
+        if (!show) continue;
+        ctx.fillStyle = COLOR_ALIVE;
+        ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+      }
+    }
+  }
+}
+
+// ============================================================
+//  ALT GAMES — Wireworld (procedural backbone-first circuit generator,
+//  ported directly from initWireworldLarge() and its ww* helpers)
+// ============================================================
+const WW_EMPTY = 0, WW_WIRE = 1, WW_HEAD = 2, WW_TAIL = 3;
+const WW_COLORS = { [WW_WIRE]: "#ffb020", [WW_HEAD]: "#00ffff", [WW_TAIL]: "#ff0000" };
+function wwHLine(x, y, len) { for (let i = 0; i < len; i++) cyclicStates[idx(x + i, y)] = WW_WIRE; }
+function wwVLine(x, y, len) { for (let i = 0; i < len; i++) cyclicStates[idx(x, y + i)] = WW_WIRE; }
+function wwLoop(x, y, w, h) {
+  wwHLine(x, y, w);
+  wwHLine(x, y + h - 1, w);
+  wwVLine(x, y + 1, h - 2);
+  wwVLine(x + w - 1, y + 1, h - 2);
+  cyclicStates[idx(x + 1, y)] = WW_HEAD;
+  cyclicStates[idx(x, y)] = WW_TAIL;
+}
+function wwSeedOn(x, y) {
+  if (x > 0 && cyclicStates[idx(x, y)] === WW_WIRE && cyclicStates[idx(x - 1, y)] === WW_WIRE) {
+    cyclicStates[idx(x, y)] = WW_HEAD;
+    cyclicStates[idx(x - 1, y)] = WW_TAIL;
+  }
+}
+function wwSeedV(x, y) {
+  if (y > 0 && cyclicStates[idx(x, y)] === WW_WIRE && cyclicStates[idx(x, y - 1)] === WW_WIRE) {
+    cyclicStates[idx(x, y)] = WW_HEAD;
+    cyclicStates[idx(x, y - 1)] = WW_TAIL;
+  }
+}
+function wwRowClear(x, y, len) {
+  for (let i = 0; i < len; i++) {
+    const px = x + i;
+    if (px < 0 || px >= boardW || y < 0 || y >= boardH) return false;
+    if (y > 0 && cyclicStates[idx(px, y - 1)] !== WW_EMPTY) return false;
+    if (y < boardH - 1 && cyclicStates[idx(px, y + 1)] !== WW_EMPTY) return false;
+  }
+  return true;
+}
+function randInt(min, max) { return min + Math.floor(Math.random() * (max - min + 1)); }
+function initWireworldLarge() {
+  cyclicStates.fill(WW_EMPTY); cyclicNewStates.fill(WW_EMPTY);
+
+  const nH = 2 + Math.floor(Math.random() * 2);
+  const hBusY = [0, 0, 0];
+  for (let i = 0; i < nH; i++) {
+    const baseY = Math.floor(boardH * (i + 1) / (nH + 1));
+    const by = Math.min(Math.max(baseY + randInt(-3, 3), 3), boardH - 4);
+    hBusY[i] = by;
+    const startX = 2 + Math.floor(Math.random() * 4);
+    const endX = boardW - 3 - Math.floor(Math.random() * 4);
+    wwHLine(startX, by, endX - startX + 1);
+    const spread = Math.floor((endX - startX) / 3);
+    const sx = startX + spread + Math.floor(Math.random() * Math.max(spread, 1));
+    wwSeedOn(sx, by);
+    if (Math.random() < 0.5) wwSeedOn(startX + Math.floor(Math.random() * Math.max(spread, 1)), by);
+  }
+
+  const nV = 2 + Math.floor(Math.random() * 2);
+  const vBusX = [0, 0, 0];
+  for (let i = 0; i < nV; i++) {
+    const baseX = Math.floor(boardW * (i + 1) / (nV + 1));
+    const bx = Math.min(Math.max(baseX + randInt(-4, 4), 3), boardW - 4);
+    vBusX[i] = bx;
+    const startY = 2 + Math.floor(Math.random() * 4);
+    const endY = boardH - 3 - Math.floor(Math.random() * 4);
+    wwVLine(bx, startY, endY - startY + 1);
+    const spread = Math.floor((endY - startY) / 3);
+    const sy = startY + spread + Math.floor(Math.random() * Math.max(spread, 1));
+    wwSeedV(bx, sy);
+    if (Math.random() < 0.5) wwSeedV(bx, startY + Math.floor(Math.random() * Math.max(spread, 1)));
+  }
+
+  let nLoops = 4 + Math.floor(Math.random() * 3);
+  for (let attempt = 0; attempt < 80 && nLoops > 0; attempt++) {
+    const lw = 10 + Math.floor(Math.random() * 12);
+    const lh = 5 + Math.floor(Math.random() * 6);
+    const lx = 2 + Math.floor(Math.random() * Math.max(boardW - lw - 4, 1));
+    const ly = 2 + Math.floor(Math.random() * Math.max(boardH - lh - 4, 1));
+
+    let clear = true;
+    for (let px = lx - 1; px <= lx + lw + 1 && clear; px++)
+      for (let py = ly - 1; py <= ly + lh + 1 && clear; py++)
+        if (px >= 0 && px < boardW && py >= 0 && py < boardH)
+          if (cyclicStates[idx(px, py)] !== WW_EMPTY) clear = false;
+    if (!clear) continue;
+
+    wwLoop(lx, ly, lw, lh);
+    nLoops--;
+
+    const connX = lx + Math.floor(lw / 2);
+    for (let b = 0; b < nH; b++) {
+      const busY = hBusY[b];
+      if (busY < ly && ly - busY <= 8) for (let py = busY; py <= ly; py++) cyclicStates[idx(connX, py)] = WW_WIRE;
+      if (busY > ly + lh - 1 && busY - (ly + lh - 1) <= 8) for (let py = ly + lh - 1; py <= busY; py++) cyclicStates[idx(connX, py)] = WW_WIRE;
+    }
+    const connY = ly + Math.floor(lh / 2);
+    for (let b = 0; b < nV; b++) {
+      const busX = vBusX[b];
+      if (busX < lx && lx - busX <= 8) for (let px = busX; px <= lx; px++) cyclicStates[idx(px, connY)] = WW_WIRE;
+      if (busX > lx + lw - 1 && busX - (lx + lw - 1) <= 8) for (let px = lx + lw - 1; px <= busX; px++) cyclicStates[idx(px, connY)] = WW_WIRE;
+    }
+  }
+
+  let nExtra = 2 + Math.floor(Math.random() * 3);
+  for (let attempt = 0; attempt < 60 && nExtra > 0; attempt++) {
+    const len = 18 + Math.floor(Math.random() * 20);
+    const bx = 2 + Math.floor(Math.random() * Math.max(boardW - len - 4, 1));
+    const by = 2 + Math.floor(Math.random() * Math.max(boardH - 4, 1));
+    if (!wwRowClear(bx, by, len)) continue;
+    wwHLine(bx, by, len);
+    const sx = bx + Math.floor(len / 3) + Math.floor(Math.random() * Math.max(Math.floor(len / 3), 1));
+    if (sx > bx && sx < bx + len - 1) {
+      cyclicStates[idx(sx, by)] = WW_HEAD;
+      cyclicStates[idx(sx - 1, by)] = WW_TAIL;
+    }
+    nExtra--;
+  }
+}
+function updateWireworld() {
+  for (let x = 0; x < boardW; x++) {
+    for (let y = 0; y < boardH; y++) {
+      const i = idx(x, y);
+      const s = cyclicStates[i];
+      if (s === WW_EMPTY) cyclicNewStates[i] = WW_EMPTY;
+      else if (s === WW_HEAD) cyclicNewStates[i] = WW_TAIL;
+      else if (s === WW_TAIL) cyclicNewStates[i] = WW_WIRE;
+      else {
+        const heads = countMooreNeighbors(x, y, (nx, ny) => cyclicStates[idx(nx, ny)] === WW_HEAD);
+        cyclicNewStates[i] = (heads === 1 || heads === 2) ? WW_HEAD : WW_WIRE;
+      }
+    }
+  }
+  cyclicStates.set(cyclicNewStates);
+  generation++;
+}
+function drawWireworldBoard() {
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
+      const s = cyclicStates[idx(x, y)];
+      if (s === WW_EMPTY) continue;
+      ctx.fillStyle = WW_COLORS[s];
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+}
+
+// ============================================================
+//  ALT GAMES — Langton's Ant (board[] reused for cell colour)
+// ============================================================
+function initLangtonsAnt() {
+  board.fill(0); cellAge.fill(0);
+  antX = randInt(Math.floor(boardW / 4), Math.floor(boardW * 3 / 4));
+  antY = randInt(Math.floor(boardH / 4), Math.floor(boardH * 3 / 4));
+  antDir = Math.floor(Math.random() * 4); // 0=up 1=right 2=down 3=left
+  generation = 0;
+  population = 0; // no Population Counter concept in firmware for this mode, but keep it live rather than stale
+}
+function updateLangtonsAnt() {
+  const i = idx(antX, antY);
+  const onBlack = board[i] === 1;
+  board[i] = onBlack ? 0 : 1;
+  population += onBlack ? -1 : 1; // cell just turned off / on
+  if (!board[i]) cellAge[i] = 0;
+  else if (tools.langtonColour) cellAge[i] = 1;
+  antDir = onBlack ? (antDir + 3) % 4 : (antDir + 1) % 4;
+  const dxs = [0, 1, 0, -1], dys = [-1, 0, 1, 0];
+  antX = (antX + dxs[antDir] + boardW) % boardW;
+  antY = (antY + dys[antDir] + boardH) % boardH;
+  generation++;
+}
+function ageLangtonsAntCells() {
+  if (!tools.langtonColour) return;
+  for (let i = 0; i < board.length; i++) if (board[i] && cellAge[i] > 0 && cellAge[i] < 65000) cellAge[i]++;
+}
+function drawLangtonsAntBoard() {
+  for (let y = 0; y < boardH; y++) {
+    for (let x = 0; x < boardW; x++) {
+      const i = idx(x, y);
+      if (!board[i]) continue;
+      ctx.fillStyle = tools.langtonColour ? ageColor(cellAge[i]) : COLOR_ALIVE;
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+  ctx.fillStyle = "#ff00ff";
+  ctx.fillRect(antX * cellSize, antY * cellSize, cellSize, cellSize);
+}
+
+// ============================================================
+//  ALT GAMES — Wolfram 1D elementary CA (scrolls a new row each generation)
+// ============================================================
+function wolframApplyRule(l, c, r) {
+  const index = (l << 2) | (c << 1) | r;
+  return (wolframRuleVal >> index) & 1;
+}
+function wolframRowColor(rowIndex, maxRows) {
+  if (!tools.wolframColour) return COLOR_ALIVE;
+  const hue = (rowIndex * 383) / maxRows; // 0-383 sweeps red->blue->red
+  let r5, g6, b5;
+  if (hue < 128) { r5 = 31; g6 = Math.floor(hue * 63 / 127); b5 = 0; }
+  else if (hue < 256) { r5 = Math.floor((255 - hue) * 31 / 127); g6 = 63; b5 = 0; }
+  else { r5 = 0; g6 = Math.floor((383 - hue) * 63 / 127); b5 = Math.floor((hue - 256) * 31 / 127); }
+  return `rgb(${Math.floor(r5 * 255 / 31)},${Math.floor(g6 * 255 / 63)},${Math.floor(b5 * 255 / 31)})`;
+}
+function initWolfram() {
+  wolframRow = 0; wolframDone = false; wolframRows = [];
+  wolframCurrent.fill(0);
+  wolframCurrent[Math.floor(boardW / 2)] = 1;
+  wolframRows.push(wolframCurrent.slice());
+  wolframRow = 1;
+  generation = 0;
+}
+function updateWolfram() {
+  const maxRows = Math.floor(SCREEN_HEIGHT / cellSize);
+  if (wolframRow >= maxRows) { wolframDone = true; return; }
+  for (let x = 0; x < boardW; x++) {
+    const l = wolframCurrent[(x - 1 + boardW) % boardW];
+    const c = wolframCurrent[x];
+    const r = wolframCurrent[(x + 1) % boardW];
+    wolframNext[x] = wolframApplyRule(l, c, r);
+  }
+  wolframRows.push(wolframNext.slice());
+  wolframCurrent.set(wolframNext);
+  wolframRow++;
+  generation++;
+}
+function drawWolframBoard() {
+  const maxRows = Math.floor(SCREEN_HEIGHT / cellSize);
+  for (let rowIndex = 0; rowIndex < wolframRows.length; rowIndex++) {
+    const row = wolframRows[rowIndex];
+    const py = rowIndex * cellSize;
+    if (py >= SCREEN_HEIGHT) break;
+    const color = wolframRowColor(rowIndex, maxRows);
+    for (let x = 0; x < boardW; x++) {
+      if (row[x]) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x * cellSize, py, cellSize, cellSize);
+      }
+    }
+  }
+}
+
+// ============================================================
+//  ALT GAMES — Lenia Sandbox (Phase 3): continuous CA, ported from
+//  LeniaMode.ino. Cells hold a value 0-255 instead of on/off, blended each
+//  step with a weighted neighbourhood (the kernel) via a growth function.
+// ============================================================
+function leniaKernelWeight(dx, dy, r) {
+  const dist = Math.sqrt(dx * dx + dy * dy) / r;
+  if (dist > 1.0) return 0.0;
+  let denom = dist * (1.0 - dist);
+  if (denom < 0.0001) denom = 0.0001;
+  return Math.exp(4.0 - 1.0 / denom);
+}
+function leniaBuildKernel() {
+  const r = leniaRadius;
+  let sum = 0;
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) sum += leniaKernelWeight(dx, dy, r);
+  if (sum < 0.0001) sum = 1.0;
+  leniaKernel.fill(0);
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const w = leniaKernelWeight(dx, dy, r) / sum;
+      leniaKernel[(dy + LENIA_MAX_RADIUS) * LENIA_KERNEL_SIZE + (dx + LENIA_MAX_RADIUS)] = w;
+    }
+  }
+}
+function leniaBuildGrowthLUT() {
+  for (let i = 0; i < 256; i++) {
+    const u = i / 255.0;
+    const d = (u - leniaMu) / leniaSigma;
+    const g = 2.0 * Math.exp(-0.5 * d * d) - 1.0; // range -1..1
+    leniaGrowthLUT[i] = g * leniaDt * 255.0;
+  }
+}
+function leniaSeed() {
+  leniaBoard.fill(0);
+  leniaNextBoard.fill(0);
+  for (let blob = 0; blob < 3; blob++) {
+    const cx = randInt(20, LENIA_GRID_W - 20);
+    const cy = randInt(20, LENIA_GRID_H - 20);
+    const rad = 10 + Math.floor(Math.random() * 8);
+    for (let y = -rad; y <= rad; y++) {
+      for (let x = -rad; x <= rad; x++) {
+        if (x * x + y * y <= rad * rad) {
+          const gx = (cx + x + LENIA_GRID_W) % LENIA_GRID_W;
+          const gy = (cy + y + LENIA_GRID_H) % LENIA_GRID_H;
+          leniaBoard[leniaIdx(gx, gy)] = randInt(80, 255);
+        }
+      }
+    }
+  }
+  generation = 0;
+}
+function leniaStep() {
+  const r = leniaRadius;
+  for (let x = 0; x < LENIA_GRID_W; x++) {
+    for (let y = 0; y < LENIA_GRID_H; y++) {
+      let sum = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        let gy = y + dy;
+        if (gy < 0) { if (tools.toroidalWorld) gy += LENIA_GRID_H; else continue; }
+        else if (gy >= LENIA_GRID_H) { if (tools.toroidalWorld) gy -= LENIA_GRID_H; else continue; }
+        for (let dx = -r; dx <= r; dx++) {
+          const w = leniaKernel[(dy + LENIA_MAX_RADIUS) * LENIA_KERNEL_SIZE + (dx + LENIA_MAX_RADIUS)];
+          if (!w) continue;
+          let gx = x + dx;
+          if (gx < 0) { if (tools.toroidalWorld) gx += LENIA_GRID_W; else continue; }
+          else if (gx >= LENIA_GRID_W) { if (tools.toroidalWorld) gx -= LENIA_GRID_W; else continue; }
+          sum += leniaBoard[leniaIdx(gx, gy)] * w;
+        }
+      }
+      let u = Math.round(sum);
+      if (u > 255) u = 255; if (u < 0) u = 0;
+      let val = leniaBoard[leniaIdx(x, y)] + leniaGrowthLUT[u];
+      if (val < 0) val = 0; if (val > 255) val = 255;
+      leniaNextBoard[leniaIdx(x, y)] = val;
+    }
+  }
+  const tmp = leniaBoard; leniaBoard = leniaNextBoard; leniaNextBoard = tmp;
+  generation++;
+}
+function leniaColorFor(v) {
+  v = Math.round(v);
+  if (leniaColorScheme === 1) {
+    // fire ramp: black -> red -> orange -> yellow -> white
+    const r = v < 96 ? Math.floor((v * 255) / 96) : 255;
+    const g = v < 96 ? 0 : v < 192 ? Math.floor(((v - 96) * 255) / 96) : 255;
+    const b = v < 192 ? 0 : Math.floor(((v - 192) * 255) / 63);
+    return `rgb(${r},${g},${b})`;
+  }
+  // blue -> cyan -> white ramp
+  const b = v;
+  const g = v > 128 ? Math.min(255, (v - 128) * 2) : 0;
+  const r = v > 200 ? Math.min(255, (v - 200) * 4) : 0;
+  return `rgb(${r},${g},${b})`;
+}
+function drawLeniaBoard() {
+  for (let x = 0; x < LENIA_GRID_W; x++) {
+    for (let y = 0; y < LENIA_GRID_H; y++) {
+      const v = leniaBoard[leniaIdx(x, y)];
+      if (v < 1) continue; // background already black
+      ctx.fillStyle = leniaColorFor(v);
+      const px = LENIA_PANEL_WIDTH + x * LENIA_CELL_SIZE;
+      const py = y * LENIA_CELL_SIZE;
+      if (tools.gridLines && LENIA_CELL_SIZE > 1) {
+        ctx.fillRect(px, py, LENIA_CELL_SIZE - 1, LENIA_CELL_SIZE - 1);
+      } else {
+        ctx.fillRect(px, py, LENIA_CELL_SIZE, LENIA_CELL_SIZE);
+      }
+    }
+  }
+}
+const LENIA_PARAM_LABELS = ["Mu", "Sigma", "Radius", "Speed"];
+function leniaParamValueText(row) {
+  switch (row) {
+    case 0: return leniaMu.toFixed(3);
+    case 1: return leniaSigma.toFixed(3);
+    case 2: return String(leniaRadius);
+    case 3: return leniaDt.toFixed(2);
+  }
+}
+function leniaAdjustParam(dir) {
+  switch (leniaPanelRow) {
+    case 0:
+      leniaMu = Math.min(0.5, Math.max(0.01, leniaMu + dir * 0.005));
+      leniaBuildGrowthLUT();
+      break;
+    case 1:
+      leniaSigma = Math.min(0.05, Math.max(0.005, leniaSigma + dir * 0.002));
+      leniaBuildGrowthLUT();
+      break;
+    case 2:
+      leniaRadius = Math.min(LENIA_MAX_RADIUS, Math.max(2, leniaRadius + dir));
+      leniaBuildKernel();
+      break;
+    case 3:
+      leniaDt = Math.min(0.5, Math.max(0.02, leniaDt + dir * 0.01));
+      leniaBuildGrowthLUT();
+      break;
+  }
+}
+function drawLeniaPanel() {
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0, 0, LENIA_PANEL_WIDTH, SCREEN_HEIGHT);
+  ctx.textBaseline = "top";
+  for (let row = 0; row < 4; row++) {
+    const yPos = 20 + row * 52;
+    const selected = (leniaPanelRow === row);
+    ctx.fillStyle = selected ? "#ffffff" : "#000000";
+    ctx.fillRect(0, yPos - 4, LENIA_PANEL_WIDTH, 40);
+    ctx.fillStyle = selected ? "#000000" : "#ffffff";
+    ctx.font = "bold 18px 'Courier New', monospace";
+    ctx.fillText(LENIA_PARAM_LABELS[row], 8, yPos);
+    ctx.fillText(leniaParamValueText(row), 8, yPos + 20);
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "12px 'Courier New', monospace";
+  if (tools.populationCounter) {
+    let sum = 0;
+    for (let i = 0; i < leniaBoard.length; i++) sum += leniaBoard[i];
+    const avg = Math.round(sum / leniaBoard.length);
+    ctx.fillText(`Avg intensity: ${avg}`, 8, SCREEN_HEIGHT - 93);
+  }
+  ctx.fillText("B:menu (hold:help)", 8, SCREEN_HEIGHT - 71);
+  ctx.fillText("A+B hold: reset", 8, SCREEN_HEIGHT - 49);
+  ctx.fillText("A:reseed", 8, SCREEN_HEIGHT - 27);
+}
+function leniaResetToDefaults() {
+  leniaMu = 0.15; leniaSigma = 0.017; leniaRadius = 6; leniaDt = 0.15;
+  leniaBuildKernel();
+  leniaBuildGrowthLUT();
+  leniaSeed();
+}
+
+// generateVerticalSymmetric/HorizontalSymmetric/RotationalSymmetric ----
+// This is the "Large" size variant (fills most of the board).
+function generateSymmetricPattern(type) {
+  clearBoardArrays();
+  if (type === 1) { // vertical mirror
+    const half = Math.floor(boardW / 2);
+    for (let x = 0; x < half; x++)
+      for (let y = 0; y < boardH; y++)
+        if (Math.random() * 100 < 20) { board[idx(x,y)] = 1; board[idx(boardW-1-x, y)] = 1; }
+  } else if (type === 2) { // horizontal mirror
+    const half = Math.floor(boardH / 2);
+    for (let x = 0; x < boardW; x++)
+      for (let y = 0; y < half; y++)
+        if (Math.random() * 100 < 20) { board[idx(x,y)] = 1; board[idx(x, boardH-1-y)] = 1; }
+  } else { // 4-fold rotational
+    const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+    for (let x = 0; x < cx; x++)
+      for (let y = 0; y < cy; y++)
+        if (Math.random() * 100 < 16) {
+          board[idx(x,y)] = 1;
+          board[idx(boardW-1-x, boardH-1-y)] = 1;
+          board[idx(boardW-1-x, y)] = 1;
+          board[idx(x, boardH-1-y)] = 1;
+        }
+  }
+  recountPopulation();
+}
+
+// ---- ported directly from generateSmallSymmetricPattern() in the sketch.
+// Seeds a small, denser, centred region rather than the whole board.
+// NOTE: firmware scales these region sizes up ("* scale") only for a Tiny
+// (2px) cell size that was removed from the real firmware for RAM reasons;
+// since this preview only has Small/Normal/Large (3/4/8px), scale is always 1.
+function generateSmallSymmetricPattern(type) {
+  clearBoardArrays();
+  if (type === 1) {
+    const halfWidth = Math.floor(boardW / 2);
+    const startX = halfWidth - 8;
+    const endX = halfWidth - 1;
+    const startY = 12;
+    const endY = Math.min(20, boardH);
+    for (let x = startX; x < endX; x++)
+      for (let y = startY; y < endY; y++)
+        if (Math.random() * 100 < 33) { board[idx(x,y)] = 1; board[idx(boardW-1-x, y)] = 1; }
+  } else if (type === 2) {
+    let startX = Math.floor(boardW/2) - 12, endX = Math.floor(boardW/2) + 12;
+    startX = Math.max(0, startX); endX = Math.min(boardW, endX);
+    const halfHeight = Math.floor(boardH / 2);
+    const startY = 4, endY = halfHeight - 2;
+    for (let x = startX; x < endX; x++)
+      for (let y = startY; y < endY; y++)
+        if (Math.random() * 100 < 25) { board[idx(x,y)] = 1; board[idx(x, boardH-1-y)] = 1; }
+  } else {
+    const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+    const rangeX = 8, rangeY = 6;
+    for (let x = cx - rangeX; x < cx; x++)
+      for (let y = cy - rangeY; y < cy; y++)
+        if (Math.random() * 100 < 20) {
+          board[idx(x,y)] = 1;
+          board[idx(boardW-1-x, boardH-1-y)] = 1;
+          board[idx(boardW-1-x, y)] = 1;
+          board[idx(x, boardH-1-y)] = 1;
+        }
+  }
+  recountPopulation();
+}
+
+// ---- ported directly from generateMediumSymmetricPattern() in the sketch. ----
+function generateMediumSymmetricPattern(type) {
+  clearBoardArrays();
+  if (type === 1) {
+    const halfWidth = Math.floor(boardW / 2);
+    const startX = halfWidth - 18;
+    const endX = halfWidth - 2;
+    const startY = 2;
+    const endY = Math.min(30, boardH);
+    for (let x = startX; x < endX; x++)
+      for (let y = startY; y < endY; y++)
+        if (Math.random() * 100 < 20) { board[idx(x,y)] = 1; board[idx(boardW-1-x, y)] = 1; }
+  } else if (type === 2) {
+    let startX = Math.floor(boardW/2) - 25, endX = Math.floor(boardW/2) + 25;
+    startX = Math.max(0, startX); endX = Math.min(boardW, endX);
+    const halfHeight = Math.floor(boardH / 2);
+    for (let x = startX; x < endX; x++)
+      for (let y = 1; y < halfHeight; y++)
+        if (Math.random() * 100 < 20) { board[idx(x,y)] = 1; board[idx(x, boardH-1-y)] = 1; }
+  } else {
+    const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+    const rangeX = 18, rangeY = 12;
+    for (let x = cx - rangeX; x < cx; x++)
+      for (let y = cy - rangeY; y < cy; y++)
+        if (Math.random() * 100 < 16) {
+          board[idx(x,y)] = 1;
+          board[idx(boardW-1-x, boardH-1-y)] = 1;
+          board[idx(boardW-1-x, y)] = 1;
+          board[idx(x, boardH-1-y)] = 1;
+        }
+  }
+  recountPopulation();
+}
+
+// sizeIdx: 0=Small, 1=Medium, 2=Large — dispatches to the three generators above.
+function generateSymmetricPatternForSize(sizeIdx, type) {
+  if (sizeIdx === 0) generateSmallSymmetricPattern(type);
+  else if (sizeIdx === 1) generateMediumSymmetricPattern(type);
+  else generateSymmetricPattern(type);
+}
+
+function loadPreset(id) {
+  clearBoardArrays();
+  const cx = Math.floor(boardW / 2), cy = Math.floor(boardH / 2);
+  PRESETS[id].cells.forEach(([dx, dy]) => {
+    const x = cx + dx, y = cy + dy;
+    if (x >= 0 && x < boardW && y >= 0 && y < boardH) board[idx(x, y)] = 1;
+  });
+  recountPopulation();
+}
+
+function seedRandom(densityPct) {
+  clearBoardArrays();
+  for (let i = 0; i < board.length; i++) if (Math.random() * 100 < densityPct) board[i] = 1;
+  recountPopulation();
+}
+
+// ============================================================
+//  MENU RENDERING
+// ============================================================
+// pageSize: how many rows fit on screen before the list needs to scroll.
+// mode "page" (default): jumps in whole blocks — matches firmware's Rule
+//   Explorer (ruleExplorerPageOffset: pages of 10, selecting item 11 jumps
+//   straight to page 2).
+// mode "scroll": continuous one-row-at-a-time scroll — matches firmware's
+//   Presets list (scrollOffset = selection - visibleItems once past the
+//   first screenful).
+// Defaults to items.length so other menus are unaffected (no scrolling at all).
+function drawMenuList(title, items, selIndex, pageSize, mode) {
+  pageSize = pageSize || items.length;
+  mode = mode || "page";
+  clearScreen();
+  ctx.fillStyle = COLOR_MENU_TEXT;
+  ctx.font = "16px 'Courier New', monospace";
+  ctx.textBaseline = "top";
+  ctx.fillText(title, 14, 10);
+  ctx.strokeStyle = "#333";
+  ctx.beginPath(); ctx.moveTo(10, 34); ctx.lineTo(SCREEN_WIDTH - 10, 34); ctx.stroke();
+
+  const scrollOffset = (mode === "scroll")
+    ? Math.max(0, selIndex - pageSize + 1)
+    : Math.floor(selIndex / pageSize) * pageSize;
+  const visibleCount = Math.min(pageSize, items.length - scrollOffset);
+
+  let y = 46;
+  for (let i = 0; i < visibleCount; i++) {
+    const itemIndex = scrollOffset + i;
+    const label = items[itemIndex];
+    if (itemIndex === selIndex) {
+      ctx.fillStyle = COLOR_SELECT_BG;
+      ctx.fillRect(6, y - 3, SCREEN_WIDTH - 12, 26);
+      ctx.fillStyle = COLOR_SELECT_TEXT;
+    } else {
+      ctx.fillStyle = COLOR_MENU_TEXT;
+    }
+    ctx.font = "15px 'Courier New', monospace";
+    ctx.fillText(label, 16, y + 2);
+    y += 27;
+  }
+
+  // Scroll/page indicator arrows, matching the firmware's up/down carets.
+  if (items.length > pageSize) {
+    ctx.fillStyle = COLOR_DIM;
+    ctx.font = "13px 'Courier New', monospace";
+    if (scrollOffset > 0) ctx.fillText("▲ more above", SCREEN_WIDTH - 130, 12);
+    if (scrollOffset + pageSize < items.length) ctx.fillText("▼ more below", SCREEN_WIDTH - 130, SCREEN_HEIGHT - 18);
+  }
+}
+
+function drawToolsMenu() {
+  const labels = TOOLS_MENU.map(t => {
+    if (t.type === "cycle") return `${t.label}: ${t.values[tools[t.key]]}`;
+    if (t.onOffLabels) return `${t.label}: ${tools[t.key] ? t.onOffLabels[1] : t.onOffLabels[0]}`;
+    return `${t.label}: ${tools[t.key] ? "ON" : "OFF"}`;
+  });
+  drawMenuList("TOOLS", labels, toolsSel);
+}
+
+// "Custom Rule" is appended as the 13th entry, matching firmware's
+// NUM_PRESET_RULES + 1 (ruleMenuSelection can reach 13).
+function ruleListLabels() { return RULE_PRESETS.map(r => r.name).concat(["Custom Rule"]); }
+
+function drawRuleList() {
+  drawMenuList("RULE EXPLORER", ruleListLabels(), ruleSel, 10);
+}
+
+function drawPresetList() {
+  drawMenuList("PRESETS", PRESETS.map(p => p.name), presetSel, 10, "scroll");
+}
+
+// ---- Custom Rule editor — ported directly from showRuleExplorerMenu()'s
+// inCustomRuleEdit branch: two 9-cell rows (neighbour counts 0-8) for Birth
+// and Survival, with a highlighted active row and a highlighted cursor cell.
+function drawRuleBitsRow(rowIndex, yPos, mask) {
+  const active = (customEditRow === rowIndex);
+  if (active) {
+    ctx.fillStyle = "rgba(255,176,32,0.12)";
+    ctx.fillRect(0, yPos - 6, SCREEN_WIDTH, 30);
+  }
+  for (let i = 0; i <= 8; i++) {
+    const xPos = 14 + i * 32;
+    const isCursor = active && i === customEditCursor;
+    if (isCursor) {
+      ctx.fillStyle = COLOR_SELECT_BG;
+      ctx.fillRect(xPos - 3, yPos - 5, 28, 24);
+      ctx.fillStyle = COLOR_SELECT_TEXT;
+    } else {
+      ctx.fillStyle = COLOR_MENU_TEXT;
+    }
+    ctx.font = "16px 'Courier New', monospace";
+    ctx.fillText((mask & (1 << i)) ? String(i) : ".", xPos, yPos);
+  }
+}
+
+function bitsOfMask(mask) {
+  const out = [];
+  for (let i = 0; i <= 8; i++) if (mask & (1 << i)) out.push(i);
+  return out.join("");
+}
+
+function drawCustomRuleEditor() {
+  clearScreen();
+  ctx.textBaseline = "top";
+  ctx.fillStyle = COLOR_MENU_TEXT;
+  ctx.font = "16px 'Courier New', monospace";
+  ctx.fillText("CUSTOM RULE", 14, 8);
+
+  ctx.font = "12px 'Courier New', monospace";
+  ctx.fillText("Birth: " + bitsOfMask(activeBirthRule), 14, 36);
+  drawRuleBitsRow(0, 60, activeBirthRule);
+
+  ctx.fillStyle = COLOR_MENU_TEXT;
+  ctx.font = "12px 'Courier New', monospace";
+  ctx.fillText("Survival: " + bitsOfMask(activeSurvivalRule), 14, 106);
+  drawRuleBitsRow(1, 130, activeSurvivalRule);
+
+  ctx.fillStyle = COLOR_DIM;
+  ctx.font = "11px 'Courier New', monospace";
+  const lines = ["Up/Down: switch row   Left/Right: move", "A: toggle bit   Hold A: start game", "B: back"];
+  lines.forEach((l, i) => ctx.fillText(l, 14, 172 + i * 16));
+}
+
+function drawSymmetricSizeMenu() {
+  drawMenuList("SYMMETRIC", SYMMETRIC_SIZE_LABELS, symmetricSizeSel);
+}
+
+function drawCellSizeMenu() {
+  drawMenuList("CELL SIZE", CELL_SIZE_NAMES, cellSizeMenuSel);
+}
+
+function drawAltGamesList() {
+  drawMenuList("ALT GAMES", ALT_GAMES_MENU, altGameSel);
+}
+function drawBriansBrainSizeMenu() {
+  drawMenuList("BRIAN'S BRAIN", BB_SIZE_LABELS, briansBrainSizeSel);
+}
+function drawDayNightDensityMenu() {
+  drawMenuList("DAY & NIGHT", DN_DENSITY_LABELS, dayNightDensitySel);
+}
+function drawSeedsGameMenu() {
+  drawMenuList("SEEDS", SEEDS_GAME_LABELS, seedsGameSel);
+}
+function drawCyclicSizeMenu() {
+  drawMenuList("CYCLIC CA", CYCLIC_SIZE_LABELS, cyclicSizeSel);
+}
+function drawWolframPresetMenu() {
+  drawMenuList("WOLFRAM 1D", WOLFRAM_PRESETS.map(p => p.name), wolframPresetSel);
+}
+
+function drawEditCursor() {
+  ctx.strokeStyle = "#ff3030";
+  ctx.lineWidth = 2;
+  const blinkOn = Math.floor(performance.now() / 400) % 2 === 0;
+  if (blinkOn) {
+    ctx.strokeRect(editCursorX * cellSize + 1, editCursorY * cellSize + 1, cellSize - 2, cellSize - 2);
+  }
+}
+
+function drawRulesPanel(lines) {
+  ctx.fillStyle = "rgba(0,0,0,0.85)";
+  ctx.fillRect(20, 20, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 40);
+  ctx.strokeStyle = "#888";
+  ctx.strokeRect(20, 20, SCREEN_WIDTH - 40, SCREEN_HEIGHT - 40);
+  ctx.fillStyle = "#fff";
+  ctx.font = "14px 'Courier New', monospace";
+  ctx.textBaseline = "top";
+  lines.forEach((l, i) => ctx.fillText(l, 34, 34 + i * 20));
+}
+
+function rulesPanelTextFor(scr) {
+  switch (scr) {
+    case "presetPreview": case "presetRunning":
+      return ["PRESETS", "", "Classic Conway's Life patterns.", "B: back   Left: cell size", "Right: reset pattern"];
+    case "random":
+      return ["RANDOM", "", "~30% density, standard B3/S23.", "Right: re-randomise"];
+    case "symmetric":
+      return ["SYMMETRIC", "", "Random vertical/horizontal/", "rotational symmetry.", "Right: regenerate"];
+    case "symmetricSize":
+      return ["SYMMETRIC", "", "Choose the pattern size.", "SET: confirm   B: back"];
+    case "cellSizeSelect":
+      return ["CELL SIZE", "", "Choose the board resolution", "for Custom.", "SET: confirm   B: back"];
+    case "custom":
+      return ["CUSTOM", "", "D-pad: move cursor", "A: toggle cell", "Hold A: start/stop sim"];
+    case "ruleRunning":
+      return ["RULE EXPLORER", "", "Custom Birth/Survival rules.", "Note: neighbour count 8 can", "never fire (8-bit rule mask)."];
+    case "ruleCustomEdit":
+      return ["CUSTOM RULE", "", "Up/Down: row  Left/Right: move", "A: toggle bit  Hold A: start"];
+    case "altLenia":
+      return ["LENIA SANDBOX", "",
+        "A continuous CA: cells hold a value",
+        "0-255, blended each step with a",
+        "weighted neighbourhood (the kernel).",
+        "",
+        "Mu: growth centre. Sigma: growth width.",
+        "Radius: neighbourhood size. Speed: step size.",
+        "",
+        "Up/Down: select param   Left/Right: adjust",
+        "A: reseed   A+B hold: reset to defaults",
+        "Up+Down: toggle colour   B: back"];
+    case "altGamesList":
+      return ["ALT GAMES", "", "Seven automata beyond Conway's", "Life, plus the Lenia Sandbox.", "SET: select   B: back to menu"];
+    case "briansBrainSize":
+      return ["BRIAN'S BRAIN", "", "3-state CA: alive/dying/dead.", "Birth on exactly 2 neighbours.", "SET: confirm   B: back"];
+    case "altBriansBrain":
+      return ["BRIAN'S BRAIN", "", "Cyan/white = firing, fading", "trail = dying. Right: restart", "Up+Down: toggle colour"];
+    case "dayNightDensity":
+      return ["DAY & NIGHT", "", "Life-like rule B3678/S34678.", "Choose starting density.", "SET: confirm   B: back"];
+    case "altDayNight":
+      return ["DAY & NIGHT", "", "B3678/S34678 — symmetric under", "colour inversion.", "Right: restart   Up+Down: colour"];
+    case "seedsGame":
+      return ["SEEDS", "", "B2, no survival — every live", "cell dies each generation.", "SET: confirm   B: back"];
+    case "altSeeds":
+      return ["SEEDS", "", "Explosive, chaotic growth.", "Right: restart (Random only)", "Up+Down: toggle colour"];
+    case "cyclicSize":
+      return ["CYCLIC CA", "", "6 states cycle in sequence when", "3+ neighbours are in the next state.", "SET: confirm   B: back"];
+    case "altCyclic":
+      return ["CYCLIC CA", "", "Forms rotating spiral waves.", "Right: restart", "Up+Down: toggle colour"];
+    case "altWireworld":
+      return ["WIREWORLD", "", "4-state: empty/wire/head/tail.", "Simulates simple electronic", "circuits. Up+Down: new circuit"];
+    case "altLangton":
+      return ["LANGTON'S ANT", "", "Simple rules, complex behaviour:", "~10,000 steps to reach the", "diagonal 'highway'. Up+Down: colour"];
+    case "wolframPreset":
+      return ["WOLFRAM 1D", "", "Elementary 1D cellular automata.", "Each row is one generation.", "SET: confirm   B: back"];
+    case "altWolfram":
+      return ["WOLFRAM 1D", "", "Scrolls one row per generation", "until the screen fills.", "Up+Down: toggle colour (restarts)"];
+    default:
+      return ["GAME OF LIFE XL", "", "B: back to menu", "Hold B: this panel"];
+  }
+}
+
+// ============================================================
+//  MAIN RENDER DISPATCH
+// ============================================================
+function render() {
+  switch (screen) {
+    case "main":
+      drawMenuList("GAME OF LIFE XL", MAIN_MENU, mainSel);
+      break;
+    case "presetList":
+      drawPresetList();
+      break;
+    case "presetPreview":
+    case "presetRunning":
+      clearScreen();
+      drawGridLines();
+      drawBoard();
+      drawHUD();
+      break;
+    case "random":
+    case "symmetric":
+      clearScreen();
+      drawGridLines();
+      drawBoard();
+      drawHUD();
+      break;
+    case "custom":
+      clearScreen();
+      drawGridLines();
+      if (customGameMode === "briansBrain") drawBriansBrainBoard();
+      else if (customGameMode === "seeds") drawSeedsBoard();
+      else drawBoard();
+      if (!running) drawEditCursor();
+      drawHUD();
+      break;
+    case "ruleList":
+      drawRuleList();
+      break;
+    case "ruleCustomEdit":
+      drawCustomRuleEditor();
+      break;
+    case "symmetricSize":
+      drawSymmetricSizeMenu();
+      break;
+    case "cellSizeSelect":
+      drawCellSizeMenu();
+      break;
+    case "ruleRunning":
+      clearScreen();
+      drawGridLines();
+      drawBoard();
+      drawHUD();
+      break;
+    case "toolsList":
+      drawToolsMenu();
+      break;
+    case "altGamesList":
+      drawAltGamesList();
+      break;
+    case "briansBrainSize":
+      drawBriansBrainSizeMenu();
+      break;
+    case "dayNightDensity":
+      drawDayNightDensityMenu();
+      break;
+    case "seedsGame":
+      drawSeedsGameMenu();
+      break;
+    case "cyclicSize":
+      drawCyclicSizeMenu();
+      break;
+    case "wolframPreset":
+      drawWolframPresetMenu();
+      break;
+    case "altBriansBrain":
+      clearScreen(); drawGridLines(); drawBriansBrainBoard(); drawHUD();
+      break;
+    case "altDayNight":
+      clearScreen(); drawGridLines(); drawDayNightBoard(); drawHUD();
+      break;
+    case "altSeeds":
+      clearScreen(); drawGridLines(); drawSeedsBoard(); drawHUD();
+      break;
+    case "altCyclic":
+      clearScreen(); drawGridLines(); drawCyclicBoard(); drawHUD();
+      break;
+    case "altWireworld":
+      clearScreen(); drawGridLines(); drawWireworldBoard();
+      break;
+    case "altLangton":
+      clearScreen(); drawGridLines(); drawLangtonsAntBoard();
+      break;
+    case "altWolfram":
+      clearScreen(); drawWolframBoard();
+      break;
+    case "altLenia":
+      clearScreen();
+      drawLeniaPanel();
+      drawLeniaBoard();
+      break;
+    case "rulesPanel":
+      // draw whatever's underneath first (frozen), then the overlay
+      break;
+  }
+  if (screen === "rulesPanel") {
+    drawRulesPanel(rulesPanelTextFor(prevScreenForRulesPanel));
+  }
+}
+
+// ============================================================
+//  CELL SIZE CYCLING (Left button)
+// ============================================================
+function cycleCellSize() {
+  cellSizeIndex = (cellSizeIndex + 1) % CELL_SIZES.length;
+  cellSize = CELL_SIZES[cellSizeIndex];
+  allocBoards();
+  // Re-run whatever generated the current view, at the new resolution
+  if (screen === "presetPreview" || screen === "presetRunning") loadPreset(currentPresetId);
+  else if (screen === "random") seedRandom(30);
+  else if (screen === "symmetric") generateSymmetricPatternForSize(currentSymmetrySize, currentSymmetryType);
+  else if (screen === "custom") { clearCustomBoardForMode(); editCursorX = Math.floor(boardW/2); editCursorY = Math.floor(boardH/2); }
+  else if (screen === "ruleRunning") seedRandom(30);
+  else if (screen === "altBriansBrain") [generateBriansBrainSmall, generateBriansBrainMedium, generateBriansBrainLarge, generateBriansBrainRandom][currentBriansBrainSize]();
+  else if (screen === "altDayNight") initializeDayNight();
+  else if (screen === "altSeeds") initializeSeeds();
+  else if (screen === "altCyclic") initializeCyclic();
+  else if (screen === "altWireworld") initWireworldLarge();
+  else if (screen === "altLangton") initLangtonsAnt();
+  else if (screen === "altWolfram") initWolfram();
+}
+
+// ============================================================
+//  INPUT HANDLING
+// ============================================================
+const HOLD_MS = 800;
+const heldTimers = {};
+let comboArmed = false; // true once Up+Down combo has fired this press-cycle
+const pressedSet = new Set();
+
+function onUp() {
+  if (screen === "main") { mainSel = (mainSel + boardW*0 + MAIN_MENU.length - 1) % MAIN_MENU.length; render(); return; }
+  if (screen === "presetList") { presetSel = (presetSel + PRESETS.length - 1) % PRESETS.length; render(); return; }
+  if (screen === "ruleList") { ruleSel = (ruleSel + RULE_LIST_TOTAL - 1) % RULE_LIST_TOTAL; render(); return; }
+  if (screen === "ruleCustomEdit") { customEditRow = 1 - customEditRow; render(); return; } // matches firmware: Up flips the row
+  if (screen === "toolsList") { toolsSel = (toolsSel + TOOLS_MENU.length - 1) % TOOLS_MENU.length; render(); return; }
+  if (screen === "symmetricSize") { symmetricSizeSel = (symmetricSizeSel + SYMMETRIC_SIZE_LABELS.length - 1) % SYMMETRIC_SIZE_LABELS.length; render(); return; }
+  if (screen === "cellSizeSelect") { cellSizeMenuSel = (cellSizeMenuSel + CELL_SIZE_NAMES.length - 1) % CELL_SIZE_NAMES.length; render(); return; }
+  if (screen === "altGamesList") { altGameSel = (altGameSel + ALT_GAMES_MENU.length - 1) % ALT_GAMES_MENU.length; render(); return; }
+  if (screen === "briansBrainSize") { briansBrainSizeSel = (briansBrainSizeSel + BB_SIZE_LABELS.length - 1) % BB_SIZE_LABELS.length; render(); return; }
+  if (screen === "dayNightDensity") { dayNightDensitySel = (dayNightDensitySel + DN_DENSITY_LABELS.length - 1) % DN_DENSITY_LABELS.length; render(); return; }
+  if (screen === "seedsGame") { seedsGameSel = (seedsGameSel + SEEDS_GAME_LABELS.length - 1) % SEEDS_GAME_LABELS.length; render(); return; }
+  if (screen === "cyclicSize") { cyclicSizeSel = (cyclicSizeSel + CYCLIC_SIZE_LABELS.length - 1) % CYCLIC_SIZE_LABELS.length; render(); return; }
+  if (screen === "wolframPreset") { wolframPresetSel = (wolframPresetSel + WOLFRAM_PRESETS.length - 1) % WOLFRAM_PRESETS.length; render(); return; }
+  if (screen === "altLenia") { leniaPanelRow = (leniaPanelRow + 3) % 4; render(); return; }
+  if (screen === "custom" && !running) { editCursorY = (editCursorY - 1 + boardH) % boardH; render(); return; }
+  if (["presetRunning","random","symmetric","ruleRunning","custom","altBriansBrain","altDayNight","altSeeds","altCyclic","altWireworld","altLangton","altWolfram"].includes(screen)) { simIntervalMs = Math.max(25, simIntervalMs - 25); return; }
+}
+function onDown() {
+  if (screen === "main") { mainSel = (mainSel + 1) % MAIN_MENU.length; render(); return; }
+  if (screen === "presetList") { presetSel = (presetSel + 1) % PRESETS.length; render(); return; }
+  if (screen === "ruleList") { ruleSel = (ruleSel + 1) % RULE_LIST_TOTAL; render(); return; }
+  if (screen === "ruleCustomEdit") { customEditRow = 1 - customEditRow; render(); return; } // matches firmware: Down also flips the row
+  if (screen === "toolsList") { toolsSel = (toolsSel + 1) % TOOLS_MENU.length; render(); return; }
+  if (screen === "symmetricSize") { symmetricSizeSel = (symmetricSizeSel + 1) % SYMMETRIC_SIZE_LABELS.length; render(); return; }
+  if (screen === "cellSizeSelect") { cellSizeMenuSel = (cellSizeMenuSel + 1) % CELL_SIZE_NAMES.length; render(); return; }
+  if (screen === "altGamesList") { altGameSel = (altGameSel + 1) % ALT_GAMES_MENU.length; render(); return; }
+  if (screen === "briansBrainSize") { briansBrainSizeSel = (briansBrainSizeSel + 1) % BB_SIZE_LABELS.length; render(); return; }
+  if (screen === "dayNightDensity") { dayNightDensitySel = (dayNightDensitySel + 1) % DN_DENSITY_LABELS.length; render(); return; }
+  if (screen === "seedsGame") { seedsGameSel = (seedsGameSel + 1) % SEEDS_GAME_LABELS.length; render(); return; }
+  if (screen === "cyclicSize") { cyclicSizeSel = (cyclicSizeSel + 1) % CYCLIC_SIZE_LABELS.length; render(); return; }
+  if (screen === "wolframPreset") { wolframPresetSel = (wolframPresetSel + 1) % WOLFRAM_PRESETS.length; render(); return; }
+  if (screen === "altLenia") { leniaPanelRow = (leniaPanelRow + 1) % 4; render(); return; }
+  if (screen === "custom" && !running) { editCursorY = (editCursorY + 1) % boardH; render(); return; }
+  if (["presetRunning","random","symmetric","ruleRunning","custom","altBriansBrain","altDayNight","altSeeds","altCyclic","altWireworld","altLangton","altWolfram"].includes(screen)) { simIntervalMs = Math.min(500, simIntervalMs + 25); return; }
+}
+function onLeft() {
+  if (screen === "custom" && !running) { editCursorX = (editCursorX - 1 + boardW) % boardW; render(); return; }
+  if (screen === "ruleCustomEdit") { customEditCursor = (customEditCursor + 8) % 9; render(); return; }
+  if (screen === "altLenia") { leniaAdjustParam(-1); render(); return; }
+  // Cell-size cycling only applies during actual gameplay (matches firmware's
+  // "during gameplay: LEFT = change cell size") — menus/submenus leave Left inert.
+  const cellSizeCyclableScreens = ["presetPreview","presetRunning","random","symmetric","custom","ruleRunning",
+    "altBriansBrain","altDayNight","altSeeds","altCyclic","altWireworld","altLangton","altWolfram"];
+  if (cellSizeCyclableScreens.includes(screen)) { cycleCellSize(); render(); }
+}
+function onRight() {
+  if (screen === "custom" && !running) { editCursorX = (editCursorX + 1) % boardW; render(); return; }
+  if (screen === "ruleCustomEdit") { customEditCursor = (customEditCursor + 1) % 9; render(); return; }
+  if (screen === "altLenia") { leniaAdjustParam(1); render(); return; }
+  if (screen === "presetPreview" || screen === "presetRunning") { loadPreset(currentPresetId); render(); return; }
+  if (screen === "random") { seedRandom(30); render(); return; }
+  // Matches firmware: Right re-randomises the seed but keeps the same type/size.
+  if (screen === "symmetric") { generateSymmetricPatternForSize(currentSymmetrySize, currentSymmetryType); render(); return; }
+  if (screen === "ruleRunning") { seedRandom(30); render(); return; }
+  // Alt Games: Right restarts the current pattern (Custom variants have no
+  // sensible "restart", matching firmware's auto-cycle skip for Custom boards).
+  if (screen === "altBriansBrain" && !briansBrainWasCustom) { [generateBriansBrainSmall, generateBriansBrainMedium, generateBriansBrainLarge, generateBriansBrainRandom][currentBriansBrainSize](); render(); return; }
+  if (screen === "altDayNight") { initializeDayNight(); render(); return; }
+  if (screen === "altSeeds" && !seedsWasCustom) { initializeSeeds(); render(); return; }
+  if (screen === "altCyclic") { initializeCyclic(); render(); return; }
+  if (screen === "altWireworld") { initWireworldLarge(); render(); return; }
+  if (screen === "altLangton") { initLangtonsAnt(); render(); return; }
+  if (screen === "altWolfram") { initWolfram(); render(); return; }
+}
+function onColourComboToggle() {
+  // Alt Games each have their own colour flag (Up+Down combo only, no Tools
+  // entry) — Wireworld has no colour mode, so the combo resets its circuit
+  // instead, and Wolfram restarts so the whole image redraws consistently.
+  if (screen === "altWireworld") { initWireworldLarge(); render(); return; }
+  if (screen === "altBriansBrain" || (screen === "custom" && customGameMode === "briansBrain")) { tools.briansBrainColour = !tools.briansBrainColour; render(); return; }
+  if (screen === "altDayNight") { tools.dayNightColour = !tools.dayNightColour; render(); return; }
+  if (screen === "altSeeds" || (screen === "custom" && customGameMode === "seeds")) { tools.seedsColour = !tools.seedsColour; render(); return; }
+  if (screen === "altCyclic") { tools.cyclicColour = !tools.cyclicColour; render(); return; }
+  if (screen === "altLangton") { tools.langtonColour = !tools.langtonColour; render(); return; }
+  if (screen === "altWolfram") { tools.wolframColour = !tools.wolframColour; initWolfram(); render(); return; }
+  if (screen === "altLenia") { leniaColorScheme = (leniaColorScheme + 1) % 2; render(); return; }
+  tools.colourMode = !tools.colourMode;
+  render();
+}
+
+function onSetTap() {
+  if (screen === "altLenia") {
+    if (pressedSet.has("b")) return; // part of the SET+B reset combo, not a plain tap
+    leniaSeed();
+    render();
+    return;
+  }
+  if (screen === "main") {
+    const choice = MAIN_MENU[mainSel];
+    if (choice === "Presets") { screen = "presetList"; presetSel = 0; }
+    else if (choice === "Random") { ruleExplorerMode = false; running = true; screen = "random"; seedRandom(30); }
+    else if (choice === "Symmetric") {
+      // Matches firmware: entering Symmetric always opens the size submenu first,
+      // resetting the selection to Small (index 0) each time.
+      screen = "symmetricSize";
+      symmetricSizeSel = 0;
+    }
+    else if (choice === "Custom") {
+      // Matches firmware: Custom routes through the Cell Size submenu first
+      // (inCellSizeSubMenu / pendingGameMode == 2), defaulting to whichever
+      // cell size is currently active rather than resetting it.
+      screen = "cellSizeSelect";
+      cellSizeMenuTarget = "custom";
+      cellSizeMenuSel = cellSizeIndex;
+    }
+    else if (choice === "Rule Explorer") { screen = "ruleList"; ruleSel = 0; }
+    else if (choice === "Alt Games") { screen = "altGamesList"; altGameSel = 0; }
+    else if (choice === "Tools") { screen = "toolsList"; toolsSel = 0; }
+    render(); return;
+  }
+  if (screen === "symmetricSize") {
+    // Confirm: matches firmware's inSymmetricSubMenu SET handler — size is
+    // whatever was selected, type/orientation is still randomised on entry.
+    currentSymmetrySize = symmetricSizeSel;
+    currentSymmetryType = Math.floor(Math.random()*3)+1;
+    ruleExplorerMode = false; running = true;
+    screen = "symmetric";
+    generateSymmetricPatternForSize(currentSymmetrySize, currentSymmetryType);
+    render(); return;
+  }
+  if (screen === "cellSizeSelect") {
+    // Confirm: apply the chosen cell size, then proceed to whichever flow
+    // requested the submenu.
+    cellSizeIndex = cellSizeMenuSel;
+    cellSize = CELL_SIZES[cellSizeIndex];
+    allocBoards();
+    if (cellSizeMenuTarget === "custom") {
+      ruleExplorerMode = false; running = false;
+      screen = "custom"; customGameMode = "life";
+      clearBoardArrays();
+      editCursorX = Math.floor(boardW/2); editCursorY = Math.floor(boardH/2);
+    } else if (cellSizeMenuTarget === "seedsCustom") {
+      altGameMode = "seeds"; running = false;
+      screen = "custom"; customGameMode = "seeds";
+      clearCustomBoardForMode();
+      editCursorX = Math.floor(boardW/2); editCursorY = Math.floor(boardH/2);
+    } else if (cellSizeMenuTarget === "briansBrainCustom") {
+      altGameMode = "briansBrain"; running = false;
+      screen = "custom"; customGameMode = "briansBrain";
+      clearCustomBoardForMode();
+      editCursorX = Math.floor(boardW/2); editCursorY = Math.floor(boardH/2);
+    }
+    render(); return;
+  }
+  if (screen === "altGamesList") {
+    const choice = ALT_GAMES_MENU[altGameSel];
+    if (choice === "Brian's Brain") { screen = "briansBrainSize"; briansBrainSizeSel = 0; }
+    else if (choice === "Day & Night") { screen = "dayNightDensity"; dayNightDensitySel = 0; }
+    else if (choice === "Seeds") { screen = "seedsGame"; seedsGameSel = 0; }
+    else if (choice === "Cyclic") { screen = "cyclicSize"; cyclicSizeSel = 0; }
+    else if (choice === "Wireworld") {
+      altGameMode = "wireworld"; running = true; screen = "altWireworld";
+      initWireworldLarge(); generation = 0; population = 0;
+    }
+    else if (choice === "Langton's Ant") {
+      altGameMode = "langton"; running = true; screen = "altLangton";
+      initLangtonsAnt(); generation = 0; population = 0;
+    }
+    else if (choice === "Wolfram 1D") { screen = "wolframPreset"; wolframPresetSel = 0; }
+    else if (choice === "Lenia Sandbox") {
+      altGameMode = "lenia"; screen = "altLenia";
+      leniaBuildKernel(); leniaBuildGrowthLUT(); leniaSeed();
+      leniaShowingRules = false;
+      lastLeniaStep = 0;
+    }
+    render(); return;
+  }
+  if (screen === "briansBrainSize") {
+    altGameMode = "briansBrain";
+    if (briansBrainSizeSel === 4) {
+      // "Custom" — matches firmware's pendingGameMode==8 routing through Cell Size.
+      briansBrainWasCustom = true;
+      screen = "cellSizeSelect";
+      cellSizeMenuTarget = "briansBrainCustom";
+      cellSizeMenuSel = cellSizeIndex;
+    } else {
+      briansBrainWasCustom = false;
+      currentBriansBrainSize = briansBrainSizeSel;
+      running = true; screen = "altBriansBrain";
+      [generateBriansBrainSmall, generateBriansBrainMedium, generateBriansBrainLarge, generateBriansBrainRandom][briansBrainSizeSel]();
+      generation = 0;
+    }
+    render(); return;
+  }
+  if (screen === "dayNightDensity") {
+    altGameMode = "dayNight";
+    running = true; screen = "altDayNight";
+    initializeDayNight();
+    render(); return;
+  }
+  if (screen === "seedsGame") {
+    altGameMode = "seeds";
+    if (seedsGameSel === 1) {
+      // "Custom" — matches firmware's pendingGameMode==6 routing through Cell Size.
+      seedsWasCustom = true;
+      screen = "cellSizeSelect";
+      cellSizeMenuTarget = "seedsCustom";
+      cellSizeMenuSel = cellSizeIndex;
+    } else {
+      seedsWasCustom = false;
+      running = true; screen = "altSeeds";
+      initializeSeeds();
+    }
+    render(); return;
+  }
+  if (screen === "cyclicSize") {
+    altGameMode = "cyclic";
+    currentCyclicSize = cyclicSizeSel;
+    running = true; screen = "altCyclic";
+    initializeCyclic();
+    render(); return;
+  }
+  if (screen === "wolframPreset") {
+    altGameMode = "wolfram";
+    wolframRuleVal = WOLFRAM_PRESETS[wolframPresetSel].rule;
+    running = true; screen = "altWolfram";
+    initWolfram();
+    render(); return;
+  }
+  if (screen === "presetList") {
+    currentPresetId = presetSel;
+    ruleExplorerMode = false; running = false;
+    screen = "presetPreview";
+    loadPreset(currentPresetId);
+    render(); return;
+  }
+  if (screen === "presetPreview") {
+    running = true; screen = "presetRunning"; render(); return;
+  }
+  if (screen === "ruleList") {
+    if (ruleSel < RULE_PRESETS.length) {
+      const r = RULE_PRESETS[ruleSel];
+      activeBirthRule = r.birth; activeSurvivalRule = r.survival;
+      ruleExplorerMode = true; running = true;
+      screen = "ruleRunning";
+      seedRandom(30);
+    } else {
+      // "Custom Rule" selected — matches firmware: opens the bit editor,
+      // continuing from whatever birth/survival rule is already active
+      // rather than resetting it.
+      screen = "ruleCustomEdit";
+      customEditRow = 0;
+      customEditCursor = 3;
+    }
+    render(); return;
+  }
+  if (screen === "ruleCustomEdit") {
+    // Short tap: toggle the selected neighbour-count bit — matches firmware's
+    // birthRule/survivalRule ^= (1 << customEditCursor).
+    if (customEditRow === 0) activeBirthRule ^= (1 << customEditCursor);
+    else activeSurvivalRule ^= (1 << customEditCursor);
+    render(); return;
+  }
+  if (screen === "custom" && !running) {
+    board[idx(editCursorX, editCursorY)] = board[idx(editCursorX, editCursorY)] ? 0 : 1;
+    recountPopulation();
+    render(); return;
+  }
+  if (screen === "toolsList") {
+    const t = TOOLS_MENU[toolsSel];
+    if (t.type === "cycle") tools[t.key] = (tools[t.key] + 1) % t.values.length;
+    else tools[t.key] = !tools[t.key];
+    render(); return;
+  }
+}
+
+function onSetHold() {
+  if (screen === "custom") {
+    running = !running;
+    render();
+  }
+  if (screen === "ruleCustomEdit") {
+    // Long press: start the game with whatever rule is currently set —
+    // matches firmware's 800ms-hold branch in handleRuleExplorerButtons().
+    ruleExplorerMode = true; running = true;
+    screen = "ruleRunning";
+    seedRandom(30);
+    render();
+  }
+}
+
+function backOneLevel() {
+  if (screen === "rulesPanel") { screen = prevScreenForRulesPanel; render(); return; }
+  if (["presetPreview","presetRunning"].includes(screen)) { running = false; screen = "presetList"; render(); return; }
+  if (screen === "presetList") { screen = "main"; render(); return; }
+  if (screen === "ruleRunning") { running = false; ruleExplorerMode = false; screen = "ruleList"; render(); return; }
+  if (screen === "ruleCustomEdit") { screen = "ruleList"; ruleSel = RULE_PRESETS.length; render(); return; }
+  if (screen === "ruleList") { screen = "main"; render(); return; }
+  if (screen === "symmetricSize") { screen = "main"; render(); return; }
+  if (screen === "cellSizeSelect") {
+    // Where "back" goes depends on which flow opened this submenu.
+    running = false;
+    if (cellSizeMenuTarget === "seedsCustom") { screen = "seedsGame"; }
+    else if (cellSizeMenuTarget === "briansBrainCustom") { screen = "briansBrainSize"; }
+    else { screen = "main"; }
+    render(); return;
+  }
+  if (screen === "custom") {
+    running = false;
+    if (customGameMode === "briansBrain") { screen = "cellSizeSelect"; cellSizeMenuTarget = "briansBrainCustom"; cellSizeMenuSel = cellSizeIndex; }
+    else if (customGameMode === "seeds") { screen = "cellSizeSelect"; cellSizeMenuTarget = "seedsCustom"; cellSizeMenuSel = cellSizeIndex; }
+    else { screen = "main"; }
+    render(); return;
+  }
+  if (["random","symmetric","toolsList"].includes(screen)) { running = false; screen = "main"; render(); return; }
+  if (screen === "altGamesList") { screen = "main"; render(); return; }
+  if (["briansBrainSize","dayNightDensity","seedsGame","cyclicSize","wolframPreset"].includes(screen)) { screen = "altGamesList"; render(); return; }
+  if (screen === "altBriansBrain") { running = false; screen = "briansBrainSize"; render(); return; }
+  if (screen === "altDayNight") { running = false; screen = "dayNightDensity"; render(); return; }
+  if (screen === "altSeeds") { running = false; screen = "seedsGame"; render(); return; }
+  if (screen === "altCyclic") { running = false; screen = "cyclicSize"; render(); return; }
+  if (screen === "altWireworld") { running = false; screen = "altGamesList"; altGameSel = 4; render(); return; }
+  if (screen === "altLangton") { running = false; screen = "altGamesList"; altGameSel = 5; render(); return; }
+  if (screen === "altWolfram") { running = false; screen = "wolframPreset"; render(); return; }
+  if (screen === "altLenia") { screen = "altGamesList"; altGameSel = 7; render(); return; }
+  screen = "main"; render();
+}
+
+function onBTap() {
+  if (screen === "altLenia" && pressedSet.has("set")) return; // part of the SET+B reset combo
+  backOneLevel();
+}
+function onBHold() {
+  if (screen === "altLenia" && pressedSet.has("set")) return; // part of the SET+B reset combo
+  if (screen === "rulesPanel") return;
+  prevScreenForRulesPanel = screen;
+  screen = "rulesPanel";
+  render();
+}
+
+// ---- generic hold/tap wiring ----
+// Returns {down, up} so keyboard events can drive the exact same logic
+// (hold timing, the tap-skip guard, and the Up+Down colour combo) as the
+// on-screen pointer buttons, instead of duplicating the state machine.
+function bindButton(el, name, { onTap, onHold }) {
+  let timer = null;
+  let firedHold = false;
+  let isActive = false; // guards against double-firing when pointerup is
+                         // immediately followed by pointerleave for the same press
+
+  function down(e) {
+    if (e.preventDefault) e.preventDefault();
+    if (isActive) return; // ignore duplicate/second-pointer downs mid-press, and keyboard auto-repeat
+    isActive = true;
+    el.classList.add("held");
+    pressedSet.add(name);
+    // Up+Down combo check
+    if ((name === "up" && pressedSet.has("down")) || (name === "down" && pressedSet.has("up"))) {
+      comboArmed = true;
+      onColourComboToggle();
+      return;
+    }
+    firedHold = false;
+    if (onHold) {
+      timer = setTimeout(() => { firedHold = true; onHold(); }, HOLD_MS);
+    }
+  }
+  function up(e) {
+    if (e.preventDefault) e.preventDefault();
+    if (!isActive) return; // already handled by an earlier up/leave for this press
+    isActive = false;
+    el.classList.remove("held");
+    pressedSet.delete(name);
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (comboArmed) {
+      if (!pressedSet.has("up") && !pressedSet.has("down")) comboArmed = false;
+      return;
+    }
+    if (!firedHold && onTap) onTap();
+  }
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointerleave", up);
+  el.addEventListener("pointercancel", up);
+
+  return { down, up };
+}
+
+const buttonHandlers = {
+  up:    bindButton(document.querySelector('[data-btn="up"]'),    "up",    { onTap: onUp }),
+  down:  bindButton(document.querySelector('[data-btn="down"]'),  "down",  { onTap: onDown }),
+  left:  bindButton(document.querySelector('[data-btn="left"]'),  "left",  { onTap: onLeft }),
+  right: bindButton(document.querySelector('[data-btn="right"]'), "right", { onTap: onRight }),
+  set:   bindButton(document.getElementById("set-btn"), "set", { onTap: onSetTap, onHold: onSetHold }),
+  b:     bindButton(document.getElementById("b-btn"),   "b",   { onTap: onBTap,   onHold: onBHold }),
+};
+
+// ---- physical keyboard support ----
+// Mirrors the on-screen pad: arrow keys for the d-pad, A/Enter/Space for the
+// A (SET) button, B for the B button. Reuses the same down()/up() handlers
+// above, so hold-to-run, hold-for-rules, and the Up+Down colour combo all
+// work identically from a keyboard — handy for two-key combos like colour
+// toggle, which are easier to hit on a keyboard than on-screen.
+const KEY_TO_BUTTON = {
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  KeyA: "set", Enter: "set", Space: "set",
+  KeyB: "b",
+};
+document.addEventListener("keydown", (e) => {
+  const name = KEY_TO_BUTTON[e.code];
+  if (!name) return;
+  e.preventDefault();
+  buttonHandlers[name].down(e);
+});
+document.addEventListener("keyup", (e) => {
+  const name = KEY_TO_BUTTON[e.code];
+  if (!name) return;
+  e.preventDefault();
+  buttonHandlers[name].up(e);
+});
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+// Dispatches to whichever engine the current screen is running — keeps
+// frame() itself simple regardless of how many automata get added.
+function stepCurrentGame() {
+  if (screen === "custom") {
+    if (customGameMode === "briansBrain") updateBriansBrain();
+    else if (customGameMode === "seeds") updateSeeds();
+    else stepLife();
+    return;
+  }
+  switch (screen) {
+    case "presetRunning": case "random": case "symmetric": case "ruleRunning":
+      stepLife(); break;
+    case "altBriansBrain": updateBriansBrain(); break;
+    case "altDayNight": updateDayNight(); break;
+    case "altSeeds": updateSeeds(); break;
+    case "altCyclic": updateCyclic(); break;
+    case "altWireworld": updateWireworld(); break;
+    case "altLangton": {
+      // Matches firmware: "Run multiple ant steps per frame for visible speed" —
+      // stepsPerFrame = max(1, currentCellSize * 4). This is a big part of why
+      // hardware reaches the highway phase much faster than one step/tick would.
+      const stepsPerFrame = Math.max(1, cellSize * 4);
+      for (let s = 0; s < stepsPerFrame; s++) updateLangtonsAnt();
+      ageLangtonsAntCells();
+      break;
+    }
+    case "altWolfram": if (!wolframDone) updateWolfram(); break;
+  }
+}
+
+function frame(t) {
+  const simRunning = running && ["presetRunning","random","symmetric","ruleRunning","custom",
+    "altBriansBrain","altDayNight","altSeeds","altCyclic","altWireworld","altLangton","altWolfram"].includes(screen);
+  if (simRunning && t - lastStepTime >= simIntervalMs) {
+    stepCurrentGame();
+    lastStepTime = t;
+    if (screen !== "rulesPanel") render();
+  } else if (screen === "custom" && !running) {
+    render(); // keep the cursor blinking
+  }
+
+  // Lenia always animates (no running/paused state, no adjustable speed —
+  // Up/Down/Left/Right are repurposed for the parameter panel instead).
+  if (screen === "altLenia") {
+    if (t - lastLeniaStep >= leniaStepIntervalMs()) {
+      leniaStep();
+      lastLeniaStep = t;
+      render();
+    }
+    // SET+B held together for 800ms: full reset — matches firmware's combo handler.
+    if (pressedSet.has("set") && pressedSet.has("b")) {
+      if (leniaResetComboStart === null) leniaResetComboStart = t;
+      else if (!leniaResetComboFired && (t - leniaResetComboStart >= 800)) {
+        leniaResetComboFired = true;
+        leniaResetToDefaults();
+        render();
+      }
+    } else {
+      leniaResetComboStart = null;
+      leniaResetComboFired = false;
+    }
+  }
+
+  requestAnimationFrame(frame);
+}
+render();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
