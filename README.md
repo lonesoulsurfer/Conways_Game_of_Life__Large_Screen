@@ -1,8 +1,13 @@
-![EKFB7789](https://github.com/user-attachments/assets/8086c965-b3ab-4619-91e8-f7d19dc50e9e)
+# Game of Life XL Screen
 
-**YouTube:** https://studio.youtube.com/video/bC17AgROvXw/edit
+This is Conway's Game of Life on a 3.5" colour screen (480 × 320 pixels). It uses a Raspberry Pi Pico. It has many cellular automata, a Lenia sandbox, and three arcade games.
 
-**Instructable:** https://www.instructables.com/Conways-Game-of-Life-XL-Screen-Raspberry-Pi-Projec/
+![Game of Life XL Screen](https://github.com/user-attachments/assets/8086c965-b3ab-4619-91e8-f7d19dc50e9e)
+
+## Build guide and video
+
+- Step-by-step build guide on Instructables: [Conway's Game of Life XL Screen](https://www.instructables.com/Conways-Game-of-Life-XL-Screen-Raspberry-Pi-Projec/)
+- Video on YouTube: [Game of Life XL Screen](https://youtu.be/bC17AgROvXw)
 
 ### ▶ [Try the Web Simulator](https://htmlpreview.github.io/?https://github.com/lonesoulsurfer/Conways_Game_of_Life__Large_Screen/blob/main/Game_of_Life_Simulation.html) — no hardware required, runs in your browser
 
@@ -11,6 +16,7 @@
 ## Contents
 
 - [Hardware & Setup](#hardware--setup)
+- [Upload the firmware](#upload-the-firmware)
 - [Web Simulator](#web-simulator)
 - [Main Menu](#main-menu)
 - [Standard Controls](#standard-controls-conway--alt-games--rule-explorer)
@@ -25,6 +31,22 @@
 ## Hardware & Setup
 
 The device runs on a Raspberry Pi Pico / RP2040 connected to a 3.5" ST7796S/ST7796U TFT display (480×320 pixels) via SPI. Six buttons handle all navigation and gameplay: Up, Down, Left, Right, SET (A), and B. A buzzer on GPIO 26 provides sound effects and music. Display brightness is PWM-controlled, and all settings (sound, volume, brightness) are saved to EEPROM so they persist between power cycles.
+
+## Upload the firmware
+
+1. Download this repository. Click **Code → Download ZIP**, then extract the ZIP file.
+2. In the Arduino IDE, install the board package **Raspberry Pi Pico/RP2040** by Earle Philhower.
+3. In the **Library Manager**, install **GFX Library for Arduino** (Arduino_GFX_Library).
+4. Open `Firmware_Game_of_Life_Colour_Lg/Firmware_Game_of_Life_Colour_Lg.ino`.
+5. Connect the Pico to your computer with a USB cable.
+6. In the **Tools** menu, set **Board** to **Raspberry Pi Pico**, and set **Port**.
+7. Click **Upload**.
+
+## What you need
+
+- All parts are in the [parts list](Parts%20List%20(2).pdf).
+- The schematic is [Schematic.png](Schematic.png).
+- The Gerber files for the front and back panels are in [Gerber_Files](Gerber_Files/).
 
 ## Web Simulator
 
@@ -215,3 +237,16 @@ A circular shoot-em-up inspired by the 1983 Konami arcade classic. Your ship orb
 | SET or B | Fire |
 | Up (hold) | Smart bomb |
 | A + B (hold) | Exit to main menu |
+
+> **Note:** Star Wars is a trademark of Lucasfilm Ltd. Gyruss is a trademark of Konami. The arcade games here are non-commercial fan versions. This project is not affiliated with or endorsed by these companies.
+
+## Support
+
+Do you like this project? You can support my work on [GitHub Sponsors](https://github.com/sponsors/lonesoulsurfer).
+
+## Licence
+
+- **Code:** [MIT License](LICENSE). You can use, change and sell it.
+- **Hardware** (PCB, panels and Gerber files): [CERN Open Hardware Licence v2, Strongly Reciprocal](LICENSE-HARDWARE). You can make, change and sell boards. If you share or sell a changed design, you must also share the changed design files under the same licence.
+
+Copyright (c) 2026 Marcus (lonesoulsurfer).
